@@ -35,6 +35,10 @@ class Node:
     nv_codes: tuple[str, ...]   # NV values this element accepts (may be empty)
     pn_codes: tuple[str, ...]   # PN (pertinent negative) values it accepts
     type_name: str | None       # simple type backing a leaf
+    #: (name, type) for every attribute the schema marks use="required".
+    #: NEMSIS puts UUIDs and timestamps here, and a missing one is invalid
+    #: however correct the element content is.
+    attributes: tuple[tuple[str, str], ...] = ()
     children: list["Node"] = field(default_factory=list)
 
     @property
@@ -163,6 +167,14 @@ class Schema:
         which is clinically different from a value simply being absent."""
         return self._attribute_codes(element, "PN")
 
+    def _required_attributes(self, element: etree._Element) -> tuple[tuple[str, str], ...]:
+        """Attributes the schema marks use="required", with their type."""
+        found = []
+        for attribute in element.iter(f"{{{XS}}}attribute"):
+            if attribute.get("use") == "required" and attribute.get("name"):
+                found.append((attribute.get("name"), attribute.get("type") or ""))
+        return tuple(found)
+
     def _sequence_of(self, element: etree._Element) -> etree._Element | None:
         """The xs:sequence defining a container's children, inline or named."""
         inline = element.find(f"{{{XS}}}complexType/{{{XS}}}sequence")
@@ -191,6 +203,7 @@ class Schema:
             nv_codes=self._nv_codes(element),
             pn_codes=self._pn_codes(element),
             type_name=self._base_type(element),
+            attributes=self._required_attributes(element),
         )
         sequence = self._sequence_of(element)
         if sequence is not None and depth < 8:  # guard against pathological nesting
@@ -213,6 +226,11 @@ class Schema:
     def patient_care_report(self) -> Node:
         """The PatientCareReport subtree — the thing a generator must fill."""
         return self._node(self._find_declaration("PatientCareReport"))
+
+    @lru_cache(maxsize=4)
+    def demographic_report(self) -> Node:
+        """The DEMDataSet's DemographicReport subtree — one agency's roster."""
+        return self._node(self._find_declaration("DemographicReport"))
 
     @lru_cache(maxsize=4)
     def demographic_group(self) -> Node:

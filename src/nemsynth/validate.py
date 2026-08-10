@@ -17,25 +17,36 @@ from lxml import etree
 SUPPORTED_VERSIONS = ("3.5.0", "3.5.1")
 DEFAULT_VERSION = "3.5.0"
 
+#: NEMSIS defines two independent documents with their own root schemas: the
+#: patient records (EMSDataSet) and the agency roster (DEMDataSet). They are
+#: validated against different files, so the root is a parameter rather than a
+#: constant — a DEM checked against the EMS schema fails for the wrong reason.
+DATASETS = ("EMSDataSet", "DEMDataSet")
 
-@lru_cache(maxsize=4)
-def _schema(version: str = DEFAULT_VERSION) -> etree.XMLSchema:
+
+@lru_cache(maxsize=8)
+def _schema(version: str = DEFAULT_VERSION,
+            dataset: str = "EMSDataSet") -> etree.XMLSchema:
     if version not in SUPPORTED_VERSIONS:
         raise ValueError(
             f"unsupported NEMSIS version {version!r}; have {SUPPORTED_VERSIONS}"
         )
-    root = resources.files("nemsynth").joinpath(f"schemas/{version}/EMSDataSet_v3.xsd")
+    if dataset not in DATASETS:
+        raise ValueError(f"unknown dataset {dataset!r}; have {DATASETS}")
+    root = resources.files("nemsynth").joinpath(
+        f"schemas/{version}/{dataset}_v3.xsd")
     with resources.as_file(root) as path:
         return etree.XMLSchema(etree.parse(str(path)))
 
 
-def errors(document: bytes, version: str = DEFAULT_VERSION) -> list[str]:
+def errors(document: bytes, version: str = DEFAULT_VERSION,
+           dataset: str = "EMSDataSet") -> list[str]:
     """Validation errors for a generated document; empty means valid."""
     try:
         tree = etree.fromstring(document).getroottree()
     except etree.XMLSyntaxError as error:
         return [f"not well-formed XML: {error}"]
-    schema = _schema(version)
+    schema = _schema(version, dataset)
     if schema.validate(tree):
         return []
     return [f"line {e.line}: {e.message}" for e in schema.error_log]
@@ -52,8 +63,9 @@ class GeneratedInvalid(RuntimeError):
         self.problems = problems
 
 
-def ensure_valid(document: bytes, version: str = DEFAULT_VERSION) -> bytes:
-    problems = errors(document, version)
+def ensure_valid(document: bytes, version: str = DEFAULT_VERSION,
+                 dataset: str = "EMSDataSet") -> bytes:
+    problems = errors(document, version, dataset)
     if problems:
         raise GeneratedInvalid(problems)
     return document

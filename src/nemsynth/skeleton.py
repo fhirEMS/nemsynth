@@ -21,6 +21,7 @@ that is *almost* valid is worse than a loud failure.
 from __future__ import annotations
 
 import random
+import uuid
 from datetime import datetime
 
 from lxml import etree
@@ -74,6 +75,15 @@ def _literal_for(schema: Schema, node: Node, rng: random.Random) -> str:
     if "date" in base.lower():
         return "2026-01-01"
     if "decimal" in base or "integer" in base or "int" in base:
+        # Honour the type's own bounds. Returning a bare "1" ignored
+        # minInclusive and produced XSD-invalid output on any element with a
+        # floor (dConfiguration.07 starts at 100000) — the same class of defect
+        # as guessing an out-of-range age.
+        if simple and simple.min_inclusive:
+            return simple.min_inclusive
+        if simple and simple.max_inclusive and simple.max_inclusive.lstrip("-").isdigit():
+            if int(simple.max_inclusive) < 1:
+                return simple.max_inclusive
         return "1"
     if simple and simple.patterns:
         raise Unfillable(
@@ -103,6 +113,7 @@ def _fill(
 ) -> None:
     """Emit `node` under `parent`, recursing into containers."""
     element = etree.SubElement(parent, f"{{{NS}}}{node.name}")
+    _set_required_attributes(element, node, rng)
 
     if node.is_container:
         for child in node.children:
@@ -157,6 +168,35 @@ def _fill(
         return
 
     element.text = _literal_for(schema, node, rng)
+
+
+def _set_required_attributes(element: etree._Element, node: Node,
+                             rng: random.Random) -> None:
+    """Fill attributes the schema marks required.
+
+    The DEMDataSet hangs a required UUID on almost every group, and the
+    document is invalid without them however correct its element content is.
+    Deriving them from the schema rather than hand-setting them per caller
+    keeps this working for any group added in a future release.
+    """
+    for name, type_name in node.attributes:
+        if element.get(name) is not None:
+            continue
+        if "UUID" in name or "UUID" in type_name:
+            element.set(name, _uuid_from(rng))
+        elif "DateTime" in type_name:
+            element.set(name, datetime(2026, 1, 1, 12, 0, 0)
+                        .strftime("%Y-%m-%dT%H:%M:%S-06:00"))
+        elif "date" in type_name.lower():
+            element.set(name, "2026-01-01")
+        else:
+            element.set(name, "SYNTHETIC")
+
+
+def _uuid_from(rng: random.Random) -> str:
+    """A UUID from the seeded RNG, so a seed reproduces the document exactly."""
+    return str(uuid.UUID(bytes=bytes(rng.getrandbits(8) for _ in range(16)),
+                         version=4))
 
 
 def _subtree_has_value(node: Node, values: dict[str, object]) -> bool:

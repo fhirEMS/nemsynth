@@ -157,9 +157,27 @@ RxNorm and SNOMED CT identifiers are clinically plausible ingredient- and
 procedure-level concepts, **not** verified against a licensed release. They are
 structurally correct and exercise a mapper; they are not a terminology source.
 
+## The agency roster (DEMDataSet)
+
+NEMSIS is two documents, joined only by agency identity. A patient record's
+header carries `dAgency.01/.02/.04` and nothing else, so **the agency's name
+exists only in the DEMDataSet**. A consumer building a FHIR `Organization` has
+no name to give it from the records alone — and US Core requires one.
+
+```sh
+nemsynth gen --seed 1 --count 300 --dem -o out/            # roster + records
+nemsynth gen --seed 2 --count 10 --dem --unnamed-agency -o out/
+```
+
+The roster describes the *same* agency the records belong to; one that
+validated perfectly and joined to nothing would look like coverage and be none.
+`--unnamed-agency` nils `dAgency.03`, which is the branch a consumer most
+easily gets wrong by turning absence into an empty string instead of keeping
+its data-absent path and withholding the profile claim.
+
 ## Status
 
-Phases 1, 2 and 3 work. An empty skeleton validates with **0 errors**; all 17
+Phases 1 through 5 work. An empty skeleton validates with **0 errors**; all 17
 mandatory sections appear; 500 documents generate in ~0.35s; every profile stays
 XSD-valid, and CI asserts the hostile traits actually appear rather than
 trusting the knobs are wired up.
@@ -177,7 +195,7 @@ It has now found defects on both sides of the fence, which is the point:
   [a permanent regression fixture](https://github.com/fhirEMS/emsinterop/blob/main/tests/fixtures/hostile/hostile_onset_no_impression.xml)
   there.
 
-Next: the fuzzing loop.
+That is the whole planned arc. Further work is breadth — more presentations, more of the demographic dataset — not new machinery.
 
 See [emsinterop's plan document](https://github.com/fhirEMS/emsinterop/blob/main/docs/06_Synthetic_Corpus_Plan.md)
 for the full phased design.
