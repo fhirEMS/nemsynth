@@ -87,16 +87,43 @@ PROFILES = {p.name: p for p in (CLEAN, LOW, MEDIUM, HIGH)}
 #: Elements whose absence is realistic and interesting. Deliberately NOT the
 #: identity or timeline spine: a corpus where the patient has no age and the
 #: call has no times is not "messy", it is useless.
-_ABSENTABLE = (
-    "eVitals.12", "eVitals.14", "eVitals.27", "eVitals.10",
-    "eSituation.11", "eScene.07", "eResponse.15",
-)
+#:
+#: Split by SCOPE, because vitals live inside a repeating group. A knob written
+#: against the top-level map stops firing the moment its element moves into a
+#: group instance — which is exactly what happened when the scenario library
+#: introduced serial vitals, and why CI asserts the traits appear rather than
+#: trusting that the engine is wired up.
+_ABSENTABLE_DOCUMENT = ("eSituation.11", "eScene.07", "eResponse.15")
+_ABSENTABLE_VITALS = ("eVitals.12", "eVitals.14", "eVitals.27", "eVitals.10")
 
 #: Elements that meaningfully carry a pertinent negative.
 _NEGATABLE = {
     "eHistory.06": PN_NO_KNOWN_ALLERGY,   # No Known Drug Allergy
     "eHistory.08": PN_REFUSED,
 }
+
+
+def _apply_to_instance(instance: dict, rng: random.Random,
+                       profile: Profile) -> dict:
+    """Messiness scoped to ONE repeating-group instance.
+
+    The two XSD-sanctioned sentinels live here, because both are vitals and
+    both belong to a single reading rather than to the record: a palpated blood
+    pressure on the second set does not make the first one palpated."""
+    for element in _ABSENTABLE_VITALS:
+        if element in instance and rng.random() < profile.nv_rate:
+            instance[element] = Absent(_nv_code(rng))
+
+    # eVitals.07 "P"/"p" — a palpated BP, routine on hypotensive patients, and
+    # a crash in a real consumer.
+    if "eVitals.07" in instance and rng.random() < profile.sentinel_rate:
+        instance["eVitals.07"] = rng.choice(["P", "p"])
+    # eVitals.18 "High"/"Low" — above or below the meter's range. Set even when
+    # the scenario recorded no glucose: a reading that only exists because it
+    # was off-scale is precisely the real-world case.
+    if rng.random() < profile.sentinel_rate:
+        instance["eVitals.18"] = rng.choice(["High", "Low"])
+    return instance
 
 
 def _age_bounds(schema: Schema) -> tuple[int, ...]:
@@ -153,8 +180,15 @@ def apply(
         return dict(values)
     messy = dict(values)
 
+    # Repeating-group instances get their own treatment: each set of serial
+    # vitals is a separate observation event and goes missing independently.
+    for key, value in list(messy.items()):
+        if isinstance(value, list):
+            messy[key] = [_apply_to_instance(dict(instance), rng, profile)
+                          for instance in value]
+
     # 1. Values that go absent, with a VARIED reason.
-    for element in _ABSENTABLE:
+    for element in _ABSENTABLE_DOCUMENT:
         if element in messy and rng.random() < profile.nv_rate:
             messy[element] = Absent(_nv_code(rng))
 
@@ -162,13 +196,6 @@ def apply(
     for element, code in _NEGATABLE.items():
         if rng.random() < profile.pn_rate:
             messy[element] = Negative(code)
-
-    # 3. The XSD-sanctioned sentinels. These are the only two in the entire
-    #    standard, and both have already broken a real consumer.
-    if "eVitals.07" in messy and rng.random() < profile.sentinel_rate:
-        messy["eVitals.07"] = rng.choice(["P", "p"])   # palpated BP
-    if rng.random() < profile.sentinel_rate:
-        messy["eVitals.18"] = rng.choice(["High", "Low"])  # off-scale glucose
 
     # 4. Boundaries: hour-24 timestamps and age extremes.
     if rng.random() < profile.boundary_rate:

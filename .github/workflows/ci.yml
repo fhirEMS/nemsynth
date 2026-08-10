@@ -63,7 +63,7 @@ jobs:
       # present, by the same greps a consumer would use to find them.
       - name: High messiness actually produces hostile traits
         run: |
-          for trait in '>P<' '>p<' 'T24:00:00' 'PN='; do
+          for trait in '>P<' '>p<' '>High<' '>Low<' 'T24:00:00' 'PN='; do
             hits=$(grep -l -- "$trait" messy-high/*.xml | wc -l)
             [ "$hits" -gt 0 ] || { echo "trait $trait never appeared" >&2; exit 1; }
             echo "$trait: $hits/100"

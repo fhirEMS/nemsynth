@@ -10,6 +10,7 @@ not). Every test here pins one side or the other.
 from __future__ import annotations
 
 import random
+import re
 
 import pytest
 
@@ -105,3 +106,40 @@ def test_profiles_differ_from_clean_at_corpus_scale():
     clean = {generate_one(seed=s, profile="clean") for s in range(15)}
     high = {generate_one(seed=s, profile="high") for s in range(15)}
     assert not (clean & high), "HIGH produced documents identical to CLEAN"
+
+
+def test_messiness_reaches_inside_repeating_groups():
+    """Regression: when the scenario library moved vitals into a repeating
+    group, every vitals knob silently stopped firing — the engine was written
+    against the top-level map, and `"eVitals.07" in values` simply became
+    False. Nothing failed; the corpus just quietly lost its sentinels.
+
+    This asserts the sentinels reach a group INSTANCE, which is also where they
+    belong: a palpated blood pressure on the second set does not make the first
+    one palpated."""
+    found = {"palpated": 0, "off_scale": 0}
+    for seed in range(60):
+        document = generate_one(seed=seed, scenario="chest-pain", profile="high")
+        for value in re.findall(rb"<eVitals\.07>([^<]+)</eVitals\.07>", document):
+            if value in (b"P", b"p"):
+                found["palpated"] += 1
+        for value in re.findall(rb"<eVitals\.18>([^<]+)</eVitals\.18>", document):
+            if value in (b"High", b"Low"):
+                found["off_scale"] += 1
+    assert found["palpated"], "no palpated BP reached a vitals group instance"
+    assert found["off_scale"], "no off-scale glucose reached a vitals group instance"
+
+
+def test_serial_vital_sets_go_missing_independently():
+    """Each set is a separate observation event. If one NV decision applied to
+    every set, a consumer could never be shown a chart where the second reading
+    is missing and the first is not — which is the ordinary real-world case."""
+    for seed in range(120):
+        document = generate_one(seed=seed, scenario="chest-pain", profile="high")
+        readings = re.findall(rb"<eVitals\.10[^>]*(?:/>|>[^<]*</eVitals\.10>)",
+                              document)
+        if len(readings) < 2:
+            continue
+        if len({b"nil" in r for r in readings}) == 2:
+            return  # one set absent, another present
+    pytest.fail("serial vitals always went missing together")
