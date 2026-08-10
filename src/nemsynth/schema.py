@@ -33,6 +33,7 @@ class Node:
     max_occurs: int          # -1 = unbounded
     nillable: bool
     nv_codes: tuple[str, ...]   # NV values this element accepts (may be empty)
+    pn_codes: tuple[str, ...]   # PN (pertinent negative) values it accepts
     type_name: str | None       # simple type backing a leaf
     children: list["Node"] = field(default_factory=list)
 
@@ -53,6 +54,8 @@ class SimpleType:
     base: str | None
     enumerations: tuple[str, ...]
     patterns: tuple[str, ...]
+    min_inclusive: str | None = None
+    max_inclusive: str | None = None
 
     @property
     def is_enumerated(self) -> bool:
@@ -114,20 +117,26 @@ class Schema:
                 if inner:
                     enums.extend(inner.enumerations)
             return SimpleType(name, None, tuple(enums), ())
+        def facet(kind: str) -> str | None:
+            node = restriction.find(f"{{{XS}}}{kind}")
+            return node.get("value") if node is not None else None
+
         return SimpleType(
             name,
             restriction.get("base"),
             tuple(e.get("value") for e in restriction.findall(f"{{{XS}}}enumeration")),
             tuple(p.get("value") for p in restriction.findall(f"{{{XS}}}pattern")),
+            facet("minInclusive"),
+            facet("maxInclusive"),
         )
 
     # -- element tree ------------------------------------------------------
-    def _nv_codes(self, element: etree._Element) -> tuple[str, ...]:
-        """NV values this element's inline type permits, resolved through the
-        union of NV.* member types the schema declares."""
+    def _attribute_codes(self, element: etree._Element, name: str) -> tuple[str, ...]:
+        """Values an NV/PN attribute permits, resolved through the union of
+        member types the schema declares."""
         codes: list[str] = []
         for attribute in element.iter(f"{{{XS}}}attribute"):
-            if attribute.get("name") != "NV":
+            if attribute.get("name") != name:
                 continue
             for union in attribute.iter(f"{{{XS}}}union"):
                 for member in (union.get("memberTypes") or "").split():
@@ -135,6 +144,14 @@ class Schema:
                     if inner:
                         codes.extend(inner.enumerations)
         return tuple(dict.fromkeys(codes))
+
+    def _nv_codes(self, element: etree._Element) -> tuple[str, ...]:
+        return self._attribute_codes(element, "NV")
+
+    def _pn_codes(self, element: etree._Element) -> tuple[str, ...]:
+        """Pertinent negatives — 'the question WAS asked and the answer is no',
+        which is clinically different from a value simply being absent."""
+        return self._attribute_codes(element, "PN")
 
     def _sequence_of(self, element: etree._Element) -> etree._Element | None:
         """The xs:sequence defining a container's children, inline or named."""
@@ -162,6 +179,7 @@ class Schema:
             max_occurs=-1 if max_raw == "unbounded" else int(max_raw),
             nillable=element.get("nillable") == "true",
             nv_codes=self._nv_codes(element),
+            pn_codes=self._pn_codes(element),
             type_name=self._base_type(element),
         )
         sequence = self._sequence_of(element)

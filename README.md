@@ -62,26 +62,61 @@ Every document is validated against those same XSDs before being written. A
 generator that emits invalid NEMSIS teaches its consumer nothing: every
 downstream finding would be ambiguous between generator bug and mapper bug.
 
+## Messiness
+
+A generator that emits only clean, fully-populated records is *less* useful than
+the handful of published samples: every document is the same well-formed shape,
+and a consumer sails through all of them. `--messiness` reintroduces the
+imperfection real exports have — reproducibly, and always **XSD-valid**.
+
+```sh
+nemsynth gen --seed 1 --count 300 --messiness high -o out/
+```
+
+| Profile | NV | PN | Sentinels | Boundaries | Untidy text |
+|---|---|---|---|---|---|
+| `clean` | — | — | — | — | — |
+| `low` | 5% | 2% | 2% | 1% | 5% |
+| `medium` (default) | 15% | 6% | 6% | 4% | 15% |
+| `high` | 30% | 15% | 15% | 12% | 35% |
+
+Validity is the constraint, not an afterthought: malformed input is rejected by
+a consumer's ingest gate before any mapping code runs, so it teaches nothing.
+What is generated is input the gate *accepts* and a consumer then mishandles —
+`eVitals.07` `P` (palpated BP), `eVitals.18` `High` (off-scale glucose), hour-24
+timestamps that are XSD-legal and FHIR-invalid, identifiers carrying `/` and
+`?`, XML-significant characters in narrative, and NV/PN codes with *varied*
+reasons so a consumer that flattens them all to "missing" gets caught.
+
+Boundary values are read from the schema's own facets rather than guessed —
+picking age `0` by hand produced XSD-invalid output, and the self-validation
+gate rejected it.
+
 ## Status
 
-Phase 1 works. An empty skeleton with no scenario values validates with **0
-errors**; all 17 mandatory sections appear; 500 documents generate in ~0.35s.
-Fed through [emsinterop](https://github.com/fhirEMS/emsinterop): **0 crashes, 0
-non-informational issues, 0 unmapped national elements** across 500 documents.
+Phases 1 and 2 work. An empty skeleton validates with **0 errors**; all 17
+mandatory sections appear; 500 documents generate in ~0.35s; every profile stays
+XSD-valid, and CI asserts the hostile traits actually appear rather than
+trusting the knobs are wired up.
 
-It earned its keep on its first run by finding a bug in *itself* — an identity
-field fell through to a last-resort literal and contradicted the header, which
-the consumer's issue ledger caught. XSD-valid and wrong is exactly the trap a
-generator must not set.
+It has now found defects on both sides of the fence, which is the point:
 
-Next: the messiness engine (NV/PN at realistic rates, the two XSD-sanctioned
-sentinels, boundary values, untidy free text), then the scenario library, then
-the fuzzing loop.
+- **In itself, on its first run** — an identity field fell through to a
+  last-resort literal and contradicted the header. XSD-valid and wrong is
+  exactly the trap a generator must not set.
+- **In its consumer** — 300 documents at `--messiness high` reached a branch
+  combination neither emsinterop's six hand-authored fixtures nor the five
+  published NEMSIS samples had: symptom onset present while the primary
+  impression was NV and no chief complaint existed. A national Required element
+  was being dropped with no ledger entry. It is now
+  [a permanent regression fixture](https://github.com/fhirEMS/emsinterop/blob/main/tests/fixtures/hostile/hostile_onset_no_impression.xml)
+  there.
+
+Next: the scenario library (12–15 clinical presentations, MCI multi-patient),
+then the fuzzing loop.
 
 See [emsinterop's plan document](https://github.com/fhirEMS/emsinterop/blob/main/docs/06_Synthetic_Corpus_Plan.md)
-for the full phased design, including the messiness engine (NV/PN at realistic
-rates, the two XSD-sanctioned sentinels, boundary values, untidy free text) and
-the fuzzing loop that is the eventual prize.
+for the full phased design.
 
 ## Install
 

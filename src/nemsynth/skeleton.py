@@ -27,6 +27,32 @@ from lxml import etree
 
 from .schema import NV_NOT_APPLICABLE, Node, Schema
 
+
+class Absent:
+    """Emit this element as nil + a SPECIFIC NV code.
+
+    A scenario or the messiness engine uses this to say *why* a value is
+    missing — "not recorded" is a different fact from "not applicable", and a
+    consumer that flattens the two is losing information the standard went out
+    of its way to carry."""
+
+    __slots__ = ("code",)
+
+    def __init__(self, code: str):
+        self.code = code
+
+
+class Negative:
+    """Emit this element as nil + a PN (pertinent negative) code.
+
+    "No known drug allergy" is an assertion, not a gap. Generating these is the
+    only way to exercise a consumer's negation handling."""
+
+    __slots__ = ("code",)
+
+    def __init__(self, code: str):
+        self.code = code
+
 NS = "http://www.nemsis.org"
 XSI = "http://www.w3.org/2001/XMLSchema-instance"
 
@@ -79,8 +105,25 @@ def _fill(
                 _fill(element, child, schema, values, rng)
         return
 
+    supplied = values.get(node.name)
+    if isinstance(supplied, Absent):
+        code = supplied.code if supplied.code in node.nv_codes else (
+            node.nv_codes[0] if node.nv_codes else None)
+        if code is None:
+            raise Unfillable(f"{node.name} accepts no NV code")
+        element.set(f"{{{XSI}}}nil", "true")
+        element.set("NV", code)
+        return
+    if isinstance(supplied, Negative):
+        code = supplied.code if supplied.code in node.pn_codes else (
+            node.pn_codes[0] if node.pn_codes else None)
+        if code is None:
+            raise Unfillable(f"{node.name} accepts no PN code")
+        element.set(f"{{{XSI}}}nil", "true")
+        element.set("PN", code)
+        return
     if node.name in values:
-        element.text = str(values[node.name])
+        element.text = str(supplied)
         return
 
     if node.nv_codes:

@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import distributions
+from . import distributions, messiness
 from .generate import SCENARIOS, generate_one
 from .validate import SUPPORTED_VERSIONS
 
@@ -20,6 +20,10 @@ def main(argv: list[str] | None = None) -> int:
     gen.add_argument("--seed", type=int, default=1)
     gen.add_argument("--count", type=int, default=1)
     gen.add_argument("--version", default="3.5.0", choices=SUPPORTED_VERSIONS)
+    gen.add_argument("--messiness", default="medium",
+                     choices=sorted(messiness.PROFILES),
+                     help="how much realistic imperfection to inject "
+                          "(clean = fully populated; high = stress)")
     gen.add_argument("-o", "--out", required=True, help="output directory")
 
     sub.add_parser("sources", help="show where the distributions come from")
@@ -45,7 +49,8 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     for offset in range(args.count):
         seed = args.seed + offset
-        document = generate_one(seed, args.scenario, args.version)
+        document = generate_one(seed, args.scenario, args.version,
+                                profile=args.messiness)
         path = out / f"{args.scenario}-{seed:08d}.xml"
         path.write_bytes(document)
     print(f"wrote {args.count} document(s) to {out}")

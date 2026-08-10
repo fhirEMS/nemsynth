@@ -7,7 +7,7 @@ import random
 import uuid
 from datetime import datetime, timedelta
 
-from . import schema, skeleton, validate
+from . import messiness, schema, skeleton, validate
 from .scenarios import chest_pain
 
 _SCHEMA_LOCATION = {
@@ -32,7 +32,8 @@ def _deterministic_uuid(rng: random.Random) -> str:
 
 
 def generate_one(seed: int, scenario: str = "chest-pain",
-                 version: str = "3.5.0") -> bytes:
+                 version: str = "3.5.0",
+                 profile: str = "medium") -> bytes:
     """One XSD-valid EMSDataSet. Same seed, byte-identical output, forever."""
     if scenario not in SCENARIOS:
         raise KeyError(f"unknown scenario {scenario!r}; have {sorted(SCENARIOS)}")
@@ -56,6 +57,12 @@ def generate_one(seed: int, scenario: str = "chest-pain",
         "eResponse.01": agency["number"],
         "eResponse.03": agency["number"],
     })
+    # Messiness is applied AFTER the scenario and before serialization, so a
+    # scenario stays clean and inspectable on its own and any finding can be
+    # isolated to one layer or the other.
+    values = messiness.apply(
+        values, rng, messiness.PROFILES[profile], schema.load(version))
+
     document = skeleton.build_document(
         schema.load(version),
         values,
