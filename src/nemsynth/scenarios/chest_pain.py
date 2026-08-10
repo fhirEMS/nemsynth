@@ -38,12 +38,14 @@ def _iso(moment: datetime) -> str:
 def build(rng: random.Random, incident_start: datetime) -> dict:
     """Sample one internally-consistent chest-pain call.
 
-    Returns a plain dict the serializer turns into XML — keeping sampling and
-    XML construction apart so a scenario can be reasoned about (and tested)
-    without any XML in view.
+    Returns a flat {element_id: value} map. The skeleton builder decides what
+    must be present and in what order; a scenario decides only what it has to
+    SAY. Anything it omits that the schema requires becomes nil+NV — which is
+    both correct and the shape real exports take constantly.
     """
     age = max(30, dist.age_years(rng))  # chest pain is not a paediatric call
     sex = dist.pick(rng, "sex")
+    call_service_type = _SERVICE_911_SCENE
 
     # Timeline: each stage offset from the last, so the sequence is always
     # ordered no matter what the samples are. Out-of-order timestamps are a
@@ -71,37 +73,52 @@ def build(rng: random.Random, incident_start: datetime) -> dict:
     spo2 = rng.randint(90, 100)
     pain = rng.randint(3, 10)
 
-    return {
-        "age": age,
-        "sex_code": _SEX[sex],
-        "refused": refused,
-        "level_of_care": _LEVEL_ALS if als else _LEVEL_BLS,
-        "service_type": _SERVICE_911_SCENE,
-        "disposition": _DISPOSITION_REFUSED if refused else _DISPOSITION_TRANSPORTED,
-        "times": {
-            "psap": _iso(dispatched - timedelta(seconds=rng.randint(20, 90))),
-            "dispatch_notified": _iso(dispatched),
-            "en_route": _iso(en_route),
-            "on_scene": _iso(on_scene),
-            "at_patient": _iso(at_patient),
-            # A refusal has no transport leg at all — omitting these is the
-            # consistency rule, not a gap.
-            "depart_scene": None if refused else _iso(depart),
-            "at_destination": None if refused else _iso(at_destination),
-            "transfer_of_care": None if refused else _iso(transfer),
-            "back_in_service": _iso(back_in_service if not refused
-                                    else depart + timedelta(seconds=600)),
-        },
-        "vitals": {
-            "taken": _iso(at_patient + timedelta(seconds=rng.randint(30, 240))),
-            "systolic": systolic,
-            "diastolic": diastolic,
-            "heart_rate": heart_rate,
-            "resp_rate": resp_rate,
-            "spo2": spo2,
-            "pain": pain,
-        },
-        # ICD-10-CM, as NEMSIS 3.5.0 requires for eSituation.11/.12.
-        "primary_impression": rng.choice(["R07.9", "I20.9", "R07.89"]),
-        "chief_complaint": "Chest pain",
+    values = {
+        # Response / dispatch
+        "eResponse.05": call_service_type,
+        "eResponse.15": _LEVEL_ALS if als else _LEVEL_BLS,
+        "eDispatch.01": "2301067",              # Chest Pain (Non-Traumatic)
+
+        # Timeline. A refusal has no transport leg, so those elements are left
+        # unsupplied and the builder emits nil+NV — the real-world shape.
+        "eTimes.01": _iso(dispatched - timedelta(seconds=rng.randint(20, 90))),
+        "eTimes.03": _iso(dispatched),
+        "eTimes.05": _iso(en_route),
+        "eTimes.06": _iso(on_scene),
+        "eTimes.07": _iso(at_patient),
+        "eTimes.13": _iso(back_in_service),
+
+        # Patient
+        "ePatient.15": age,
+        "ePatient.16": "2516009",               # Age units: Years
+        "ePatient.25": _SEX[sex],
+
+        # Situation
+        "eSituation.03": "2803001",             # Complaint type: Chief
+        "eSituation.04": "Chest pain",
+        "eSituation.11": rng.choice(["R07.9", "I20.9", "R07.89"]),
+
+        # Vitals — one set, internally consistent
+        "eVitals.01": _iso(at_patient + timedelta(seconds=rng.randint(30, 240))),
+        "eVitals.02": "9923001",                # Obtained prior to care: No
+        "eVitals.06": systolic,
+        "eVitals.07": diastolic,
+        "eVitals.10": heart_rate,
+        "eVitals.12": spo2,
+        "eVitals.14": resp_rate,
+        "eVitals.27": pain,
+
+        # Scene
+        "eScene.01": "9923003",                 # First unit on scene: Yes
+        "eScene.07": "9923001",                 # MCI: No
+
+        # Outcome of the call
+        "eDisposition.30": _DISPOSITION_REFUSED if refused else _DISPOSITION_TRANSPORTED,
     }
+    if not refused:
+        values.update({
+            "eTimes.09": _iso(depart),
+            "eTimes.11": _iso(at_destination),
+            "eTimes.12": _iso(transfer),
+        })
+    return values

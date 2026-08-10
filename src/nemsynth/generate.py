@@ -7,9 +7,13 @@ import random
 import uuid
 from datetime import datetime, timedelta
 
-from . import validate
+from . import schema, skeleton, validate
 from .scenarios import chest_pain
-from .serialize import build_document
+
+_SCHEMA_LOCATION = {
+    "3.5.0": "http://www.nemsis.org https://nemsis.org/media/nemsis_v3/release-3.5.0/XSDs/NEMSIS_XSDs/EMSDataSet_v3.xsd",
+    "3.5.1": "http://www.nemsis.org https://nemsis.org/media/nemsis_v3/release-3.5.1/XSDs/NEMSIS_XSDs/EMSDataSet_v3.xsd",
+}
 
 SCENARIOS = {"chest-pain": chest_pain.build}
 
@@ -39,19 +43,27 @@ def generate_one(seed: int, scenario: str = "chest-pain",
     incident = datetime(2026, 1, 1) + timedelta(
         minutes=rng.randint(0, 365 * 24 * 60)
     )
-    call = SCENARIOS[scenario](rng, incident)
-    meta = {
-        "uuid": _deterministic_uuid(rng),
-        "pcr_number": f"NS-{seed:08d}",
-        "agency_number": "9901",
-        "agency_state_id": "SY-9901",
-        "state": "49",
-        "generator_version": __import__("nemsynth").__version__,
-        "family_name": rng.choice(_FAMILY),
-        "given_name": rng.choice(_GIVEN),
-        "dispatch_reason": "2301067",  # Chest Pain (Non-Traumatic)
-    }
-    document = build_document(call, meta, version=version)
+    values = SCENARIOS[scenario](rng, incident)
+    agency = {"state_id": "SY-9901", "number": "9901", "state": "49"}
+    values.update({
+        "eRecord.01": f"NS-{seed:08d}",
+        "ePatient.02": rng.choice(_FAMILY),
+        "ePatient.03": rng.choice(_GIVEN),
+        # Identity must agree with the header. The skeleton's last-resort
+        # literal would satisfy the XSD while contradicting dAgency.02 — valid
+        # and wrong, which is the exact trap a generator must not set. (Found
+        # on the first real run, by a consumer's issue ledger.)
+        "eResponse.01": agency["number"],
+        "eResponse.03": agency["number"],
+    })
+    document = skeleton.build_document(
+        schema.load(version),
+        values,
+        agency=agency,
+        uuid=_deterministic_uuid(rng),
+        rng=rng,
+        schema_location=_SCHEMA_LOCATION[version],
+    )
     return validate.ensure_valid(document, version)
 
 
