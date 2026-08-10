@@ -56,6 +56,11 @@ class SimpleType:
     patterns: tuple[str, ...]
     min_inclusive: str | None = None
     max_inclusive: str | None = None
+    max_length: int | None = None
+    #: code -> human label, from the XSD's own xs:documentation. Lets a
+    #: scenario choose a code by MEANING and lets a test prove the code still
+    #: means what the scenario says it does.
+    labels: dict = field(default_factory=dict)
 
     @property
     def is_enumerated(self) -> bool:
@@ -128,6 +133,11 @@ class Schema:
             tuple(p.get("value") for p in restriction.findall(f"{{{XS}}}pattern")),
             facet("minInclusive"),
             facet("maxInclusive"),
+            int(facet("maxLength")) if facet("maxLength") else None,
+            {
+                e.get("value"): "".join(e.itertext()).strip()
+                for e in restriction.findall(f"{{{XS}}}enumeration")
+            },
         )
 
     # -- element tree ------------------------------------------------------

@@ -85,7 +85,13 @@ def _literal_for(schema: Schema, node: Node, rng: random.Random) -> str:
     # and meaningless is worse than one that is loudly synthetic, because it
     # reads as data. (An identity field reaching here is a scenario bug — see
     # eResponse.01, which contradicted the header until it was supplied.)
-    return "SYNTHETIC-UNSPECIFIED"
+    #
+    # Clamp to the type's own maxLength: the full marker is 21 characters and
+    # plenty of NEMSIS string types are shorter, so an unclamped literal is
+    # itself XSD-invalid. Truncated, it stays greppable.
+    literal = "SYNTHETIC-UNSPECIFIED"
+    limit = simple.max_length if simple else None
+    return literal[:limit] if limit else literal
 
 
 def _fill(
@@ -100,8 +106,26 @@ def _fill(
 
     if node.is_container:
         for child in node.children:
-            supplied = _subtree_has_value(child, values)
-            if child.required or supplied:
+            # A repeating group: the scenario supplies a LIST of instance maps,
+            # one per occurrence. Serial vitals, several medications, several
+            # procedures — the shape of any real transport, and the shape a
+            # consumer must turn into N resources sharing the group's .01
+            # timestamp. A generator that can only emit one instance can never
+            # test that rule at all.
+            instances = values.get(child.name)
+            if isinstance(instances, list) and child.is_container:
+                if child.max_occurs != -1 and len(instances) > child.max_occurs:
+                    raise Unfillable(
+                        f"{child.name}: {len(instances)} instances supplied but "
+                        f"the schema allows at most {child.max_occurs}"
+                    )
+                for instance in instances:
+                    # Instance values shadow the document-wide ones, so a group
+                    # can carry its own timestamp while still seeing shared
+                    # context.
+                    _fill(element, child, schema, {**values, **instance}, rng)
+                continue
+            if child.required or _subtree_has_value(child, values):
                 _fill(element, child, schema, values, rng)
         return
 
@@ -161,15 +185,20 @@ def build_patient_care_report(
     return pcr
 
 
-def build_document(
+def build_dataset(
     schema: Schema,
-    values: dict[str, object],
+    reports: list[tuple[dict[str, object], str]],
     agency: dict[str, str],
-    uuid: str,
     rng: random.Random,
     schema_location: str,
 ) -> bytes:
-    """One EMSDataSet containing one PatientCareReport."""
+    """One EMSDataSet carrying N PatientCareReports.
+
+    N > 1 is a mass-casualty incident: several patients from one scene, sharing
+    the incident but each with their own chart. It is also the shape that
+    catches a consumer which assumes one report per file — a reasonable-looking
+    assumption that silently discards every patient but the first.
+    """
     root = etree.Element(f"{{{NS}}}EMSDataSet", nsmap={None: NS, "xsi": XSI})
     root.set(f"{{{XSI}}}schemaLocation", schema_location)
 
@@ -182,6 +211,19 @@ def build_document(
     ):
         etree.SubElement(demographic, f"{{{NS}}}{tag}").text = value
 
-    header.append(build_patient_care_report(schema, values, uuid, rng))
+    for values, uuid in reports:
+        header.append(build_patient_care_report(schema, values, uuid, rng))
     return etree.tostring(root, xml_declaration=True, encoding="UTF-8",
                           pretty_print=True)
+
+
+def build_document(
+    schema: Schema,
+    values: dict[str, object],
+    agency: dict[str, str],
+    uuid: str,
+    rng: random.Random,
+    schema_location: str,
+) -> bytes:
+    """One EMSDataSet containing one PatientCareReport."""
+    return build_dataset(schema, [(values, uuid)], agency, rng, schema_location)

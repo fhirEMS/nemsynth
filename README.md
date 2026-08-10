@@ -92,9 +92,74 @@ Boundary values are read from the schema's own facets rather than guessed —
 picking age `0` by hand produced XSD-invalid output, and the self-validation
 gate rejected it.
 
+## Scenarios
+
+Fifteen presentations, chosen for **mapping coverage** rather than clinical
+variety on its own — each reaches something a translator must get right that
+the others do not.
+
+```sh
+nemsynth gen --seed 1 --count 300 --scenario mixed -o out/   # rotates all 15
+nemsynth gen --seed 1 --count 20 --mci 5 -o out/             # 5 patients/file
+```
+
+| | |
+|---|---|
+| `chest-pain` | cardiac interventions, ALS-heavy, serial vitals |
+| `cardiac-arrest` | arrest fields, resuscitation, unresponsive vitals |
+| `stroke` | last-known-well timing, hypertensive presentation |
+| `respiratory` | nebulised route, SpO2 as the driving vital |
+| `diabetic` | glucose as a value, and the off-scale sentinel path |
+| `overdose` | intranasal naloxone, altered LOC, refusal after reversal |
+| `seizure` | postictal altered mental status |
+| `trauma-mvc` | external-cause injury codes, high refusal rate |
+| `trauma-fall` | geriatric, low-acuity injury |
+| `allergic-reaction` | IM epinephrine, rapid improvement across serial vitals |
+| `abdominal-pain` | the ordinary BLS transport, minimal intervention |
+| `psychiatric` | behavioural, restraint, no drug therapy |
+| `obstetric` | age-banded, imminent delivery |
+| `pediatric-fever` | age charted in **months**, paediatric vital ranges |
+| `interfacility` | not a 911 scene response: the service-type branch |
+
+A scenario declares only what is clinically distinctive — complaint, dispatch
+code, impressions, medications, procedures, vital ranges. The shared plumbing
+(timeline, demographics, serial vitals, disposition) lives in `base.py`, so
+adding a presentation is a paragraph of clinical logic and fifteen scenarios
+cannot drift apart.
+
+**Repeating groups** matter more than breadth. Serial vitals, several
+medications and several procedures are emitted as genuine repeating groups with
+per-instance timestamps, because a consumer must turn N instances into N
+resources sharing the group's `.01` timestamp — and a generator that could only
+emit one instance per group could never test that rule at all. `--mci N` goes
+further: one `EMSDataSet` holding N `PatientCareReport`s that share an incident
+number, which catches a consumer assuming one report per file.
+
+### On codes
+
+NEMSIS values are opaque seven-digit numbers, so a wrong one is invisible on
+inspection and still validates whenever it belongs to the same enumeration.
+Every code here is therefore pinned with the label the **XSD's own
+`xs:documentation`** gives it, and a test reads those labels back and fails if
+a code stops meaning what the library claims.
+
+That check earned its place immediately — it caught three defects in this
+library while it was being written, all XSD-valid:
+
+- `YesNoValues` is `9923001 = No`, `9923003 = Yes`. An inverted pair had every
+  generated call quietly declaring itself a **mass casualty incident**.
+- `eSituation.02` has its *own* yes/no set in a different order (`9922001` is
+  No), so reusing the generic one was invalid.
+- `eSituation.11` admits `[A-QSTUZ]` but not `V-Y`, so an external-cause code
+  is legal in `eInjury.01` and illegal as a primary impression.
+
+RxNorm and SNOMED CT identifiers are clinically plausible ingredient- and
+procedure-level concepts, **not** verified against a licensed release. They are
+structurally correct and exercise a mapper; they are not a terminology source.
+
 ## Status
 
-Phases 1 and 2 work. An empty skeleton validates with **0 errors**; all 17
+Phases 1, 2 and 3 work. An empty skeleton validates with **0 errors**; all 17
 mandatory sections appear; 500 documents generate in ~0.35s; every profile stays
 XSD-valid, and CI asserts the hostile traits actually appear rather than
 trusting the knobs are wired up.
@@ -112,8 +177,7 @@ It has now found defects on both sides of the fence, which is the point:
   [a permanent regression fixture](https://github.com/fhirEMS/emsinterop/blob/main/tests/fixtures/hostile/hostile_onset_no_impression.xml)
   there.
 
-Next: the scenario library (12–15 clinical presentations, MCI multi-patient),
-then the fuzzing loop.
+Next: the fuzzing loop.
 
 See [emsinterop's plan document](https://github.com/fhirEMS/emsinterop/blob/main/docs/06_Synthetic_Corpus_Plan.md)
 for the full phased design.
