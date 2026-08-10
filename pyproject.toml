@@ -1,0 +1,32 @@
+[project]
+name = "nemsynth"
+version = "0.1.0"
+description = "Statistically grounded synthetic NEMSIS v3.5 ePCR generator — a Synthea for EMS"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "fhirEMS" }]
+# Deliberately NO dependency on emsinterop: a generator that imported the
+# consumer's assumptions could only ever produce what that consumer already
+# handles, which defeats the entire purpose. The two agree through the XSD.
+dependencies = ["lxml>=5.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+nemsynth = "nemsynth.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"nemsynth" = ["data/*.json", "schemas/**/*.xsd"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,127 @@
+{
+  "_source": {
+    "title": "2022 National EMS Data Report",
+    "publisher": "NEMSIS Technical Assistance Center (NHTSA Office of EMS)",
+    "url": "https://nemsis.org/wp-content/uploads/2025/02/NEMSIS-End-of-Year-Report-2023.pdf",
+    "basis": "42,302,358 911-response (scene) EMS activations",
+    "retrieved": "2026-08-10",
+    "note": [
+      "Every percentage below is transcribed from that report, not estimated.",
+      "Where this file carries a number the report does NOT publish, the key is",
+      "suffixed `_approx` and the reasoning is stated inline — so a reader can",
+      "always tell measured national data from our working assumption.",
+      "Refine against the Public-Release Research Dataset (60.3M activations)",
+      "when a licensed extract is available."
+    ]
+  },
+
+  "service_type": {
+    "_element": "eResponse.05",
+    "_measured": true,
+    "911 Response (Scene)": 0.790,
+    "Medical Transport": 0.107,
+    "Interfacility Transport": 0.088,
+    "Intercept": 0.005,
+    "Mutual Aid": 0.003,
+    "Standby": 0.003,
+    "Other": 0.004
+  },
+
+  "level_of_care": {
+    "_element": "eResponse.15 (crew level)",
+    "_measured": true,
+    "ALS-Paramedic": 0.756,
+    "BLS-Basic/EMT": 0.182,
+    "ALS-AEMT": 0.019,
+    "Specialty Critical Care": 0.015,
+    "BLS-AEMT": 0.008,
+    "Other": 0.020
+  },
+
+  "disposition": {
+    "_element": "eDisposition.12",
+    "_measured": true,
+    "_note": "The long tail matters: a generator that only emits transports would never exercise refusal, cancellation, or death-at-scene paths — which is where NV/PN semantics concentrate.",
+    "Patient Treated, Transported by EMS": 0.577,
+    "Canceled (Prior to Arrival At Scene)": 0.064,
+    "Patient Treated, Transferred Care to Another EMS Professional": 0.061,
+    "Patient Refused Evaluation/Care (Without Transport)": 0.059,
+    "Patient Treated, Released (AMA)": 0.050,
+    "Patient Evaluated, No Treatment/Transport Required": 0.043,
+    "Canceled on Scene (No Patient Contact)": 0.032,
+    "Canceled on Scene (No Patient Found)": 0.027,
+    "Patient Treated, Released (per protocol)": 0.022,
+    "Assist, Unit": 0.018,
+    "Assist, Public": 0.012,
+    "Assist, Agency": 0.010,
+    "Standby-Public Safety, Fire, or EMS Operational Support Provided": 0.008,
+    "Patient Dead at Scene-No Resuscitation Attempted (Without Transport)": 0.008,
+    "Patient Dead at Scene-Resuscitation Attempted (Without Transport)": 0.003,
+    "Standby-No Services or Support Provided": 0.003,
+    "Patient Treated, Transported by Private Vehicle": 0.002,
+    "Patient Treated, Transported by Law Enforcement": 0.001,
+    "Patient Refused Evaluation/Care (With Transport)": 0.001,
+    "Patient Dead at Scene-No Resuscitation Attempted (With Transport)": 0.0002,
+    "Patient Dead at Scene-Resuscitation Attempted (With Transport)": 0.0001
+  },
+
+  "sex": {
+    "_element": "ePatient.25",
+    "_measured": true,
+    "_note": "Report gives Female 51.3% of 911 scene activations with patient contact.",
+    "Female": 0.513,
+    "Male": 0.487
+  },
+
+  "transport_method": {
+    "_element": "eDisposition.16",
+    "_measured": true,
+    "Ground-Ambulance": 0.988,
+    "Other": 0.012
+  },
+
+  "dispatch_reason_approx": {
+    "_element": "eDispatch.01",
+    "_measured": false,
+    "_reasoning": [
+      "The report's published figure is that 'sick person' is the most common",
+      "dispatch complaint at ~20% (2020 PRRD description, PMID 35583482).",
+      "The remaining shape below is a WORKING ASSUMPTION consistent with that",
+      "anchor and with the injury findings (falls = 37% of injury causes), not",
+      "a measured distribution. Replace wholesale when the PRRD is licensed."
+    ],
+    "Sick Person": 0.20,
+    "Falls": 0.12,
+    "Breathing Problem": 0.08,
+    "Chest Pain": 0.07,
+    "Traffic/Transportation Incident": 0.06,
+    "Unconscious/Fainting": 0.05,
+    "Convulsions/Seizure": 0.04,
+    "Abdominal Pain": 0.04,
+    "Psychiatric/Behavioral": 0.04,
+    "Overdose/Poisoning": 0.03,
+    "Cardiac Arrest": 0.01,
+    "Stroke/CVA": 0.02,
+    "Other": 0.24
+  },
+
+  "age_years_approx": {
+    "_element": "ePatient.15",
+    "_measured": false,
+    "_reasoning": [
+      "The report's 'typical patient' age band skews old (71-80 is the largest",
+      "single band at 16.1%). The bands below reproduce that skew — EMS is",
+      "disproportionately geriatric — without claiming to be the published",
+      "distribution, which the report does not give in full."
+    ],
+    "bands": [
+      {"min": 0, "max": 1, "weight": 0.01},
+      {"min": 1, "max": 17, "weight": 0.07},
+      {"min": 18, "max": 40, "weight": 0.18},
+      {"min": 41, "max": 60, "weight": 0.22},
+      {"min": 61, "max": 70, "weight": 0.15},
+      {"min": 71, "max": 80, "weight": 0.161},
+      {"min": 81, "max": 100, "weight": 0.209}
+    ]
+  }
+}
