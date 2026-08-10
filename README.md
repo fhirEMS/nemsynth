@@ -43,26 +43,40 @@ plausible-looking number should never be mistaken for measured data.
 nemsynth sources     # provenance for every distribution, measured vs assumed
 ```
 
-## Status — early
+## How it works
 
-Working: the statistical grounding, seeded reproducibility, the scenario /
-serializer separation, the CLI, and the **self-validation gate** — every
-document is validated against the vendored NEMSIS XSDs before it is written,
-because a generator that emits invalid NEMSIS teaches its consumer nothing
-(every downstream finding would be ambiguous between generator bug and mapper
-bug).
+**The document is built from the XSD, not by hand.** `schema.py` parses the
+vendored NEMSIS schemas into a navigable model — ordered children, occurrence
+limits, nillability, the NV codes each element accepts, the values its type
+permits. `skeleton.py` walks that model and emits every required element in
+order.
 
-Not yet working: the first scenario does not pass that gate. NEMSIS mandates
-**17 sections** per PatientCareReport, many with deeply nested required
-children, and hand-deriving those sequences proved to be the wrong approach —
-each fix surfaced another requirement.
+That inverts the work: the **schema** decides what must be present and where; a
+**scenario** decides only what it has to *say*, as a flat `{element_id: value}`
+map. Where a scenario is silent, the builder emits nil + NV — the honest answer,
+and the shape real exports take constantly. Adding a scenario is clinical logic,
+not schema archaeology, and output cannot drift from the standard because it is
+derived from it.
 
-**Next step, and the right design:** build the document skeleton *from the XSD*
-rather than by hand. A schema walker emits every required element — nil + NV
-where a scenario has nothing to say — and scenarios fill in only what they care
-about. That inverts the work: adding a scenario becomes clinical logic instead
-of schema archaeology, and it cannot drift from the schema because it is derived
-from it. The self-validation gate stays as the backstop.
+Every document is validated against those same XSDs before being written. A
+generator that emits invalid NEMSIS teaches its consumer nothing: every
+downstream finding would be ambiguous between generator bug and mapper bug.
+
+## Status
+
+Phase 1 works. An empty skeleton with no scenario values validates with **0
+errors**; all 17 mandatory sections appear; 500 documents generate in ~0.35s.
+Fed through [emsinterop](https://github.com/fhirEMS/emsinterop): **0 crashes, 0
+non-informational issues, 0 unmapped national elements** across 500 documents.
+
+It earned its keep on its first run by finding a bug in *itself* — an identity
+field fell through to a last-resort literal and contradicted the header, which
+the consumer's issue ledger caught. XSD-valid and wrong is exactly the trap a
+generator must not set.
+
+Next: the messiness engine (NV/PN at realistic rates, the two XSD-sanctioned
+sentinels, boundary values, untidy free text), then the scenario library, then
+the fuzzing loop.
 
 See [emsinterop's plan document](https://github.com/fhirEMS/emsinterop/blob/main/docs/06_Synthetic_Corpus_Plan.md)
 for the full phased design, including the messiness engine (NV/PN at realistic
