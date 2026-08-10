@@ -20,10 +20,12 @@ import re
 from datetime import datetime
 
 import pytest
+from lxml import etree
 
 from nemsynth import schema, validate
 from nemsynth.generate import generate_mci, generate_one, scenario_for
 from nemsynth.scenarios import base
+from nemsynth.skeleton import NS
 from nemsynth.scenarios.library import LIBRARY
 
 
@@ -78,6 +80,25 @@ PINNED = {
     # both values are legal wherever the type appears, so the document still
     # validates while asserting the opposite of what the scenario meant.
     "eScene.07": {base.YES: "Yes", base.NO: "No"},
+    # An ECG rhythm is the sharpest example of why this test exists: 9901035
+    # is PEA, and picking it for a routine chest-pain patient would have put
+    # every one of them in cardiac arrest — clinically absurd, XSD-valid, and
+    # invisible without reading the label back.
+    "eVitals.03": {base.ECG_RHYTHM_SINUS: "Sinus Rhythm"},
+    "eVitals.04": {base.ECG_TYPE_12_LEAD: "12 Lead"},
+    "eArrest.11": {base.RHYTHM_VFIB: "Ventricular Fibrillation",
+                   base.RHYTHM_ASYSTOLE: "Asystole"},
+    "eArrest.12": {base.ROSC_NO: "No",
+                   base.ROSC_PRIOR_TO_ED: "Yes, Prior to Arrival at the ED"},
+    "eArrest.18": {base.END_ROSC_FIELD: "ROSC in the Field",
+                   base.END_EXPIRED_FIELD: "Expired in the Field"},
+    "eDisposition.16": {base.TRANSPORT_GROUND: "Ground-Ambulance"},
+    "eDisposition.21": {base.DEST_ED: "Hospital-Emergency Department"},
+    "eDisposition.19": {base.ACUITY_CRITICAL: "Critical (Red)",
+                        base.ACUITY_LOWER: "Lower Acuity (Green)"},
+    "eMedications.10": {base.ROLE_PARAMEDIC: "Paramedic"},
+    "eMedications.08": {base.MED_NO_COMPLICATION: "None"},
+    "eProcedures.07": {base.PROC_NO_COMPLICATION: "None"},
 }
 
 
@@ -220,3 +241,45 @@ def test_only_the_first_unit_is_first_on_scene():
 def test_mci_rejects_an_empty_incident():
     with pytest.raises(ValueError):
         generate_mci(seed=1, patients=0)
+
+
+def test_arrest_outcome_is_internally_consistent():
+    """A patient with return of spontaneous circulation is not also expired in
+    the field, and CPR discontinued "for ROSC" must not appear on a patient who
+    never got it. Both contradictions are XSD-valid and would teach a consumer
+    something false."""
+    import random as _random
+    for seed in range(60):
+        block = base._arrest_block(_random.Random(seed))
+        rosc = block["eArrest.12"] != base.ROSC_NO
+        assert block["eArrest.18"] == (base.END_ROSC_FIELD if rosc
+                                       else base.END_EXPIRED_FIELD)
+        assert block["eArrest.16"] == (base.CPR_STOPPED_ROSC if rosc
+                                       else base.CPR_STOPPED_PROTOCOL)
+
+
+def test_glasgow_components_sum_to_the_total():
+    """A chart whose GCS components contradict its total is the sort of
+    internal inconsistency a consumer may reasonably trust and be wrong on."""
+    for seed in range(40):
+        document = generate_one(seed=seed, scenario="chest-pain", profile="clean")
+        root = etree.fromstring(document)
+        for group in root.iter(f"{{{NS}}}eVitals.VitalGroup"):
+            def value(tag):
+                found = group.find(f"{{{NS}}}{tag}")
+                return int(found.text) if found is not None and found.text else None
+            eye, verbal, motor = value("eVitals.19"), value("eVitals.20"), value("eVitals.21")
+            total = value("eVitals.23")
+            if None in (eye, verbal, motor, total):
+                continue
+            assert eye + verbal + motor == total, "GCS components != total"
+            assert 3 <= total <= 15
+
+
+def test_delay_codes_are_not_shared_between_elements():
+    """Each of the five delay elements has its OWN enumeration. Reusing one
+    element's code across all five was XSD-invalid, and the gate caught it."""
+    codes = {element: (delay, none) for element, delay, none in base._DELAYS}
+    assert len(codes) == 5
+    prefixes = {element: delay[:4] for element, (delay, _) in codes.items()}
+    assert len(set(prefixes.values())) == 5, "delay codes share a prefix"

@@ -91,6 +91,7 @@ LIBRARY: dict[str, Presentation] = {
     "chest-pain": Presentation(
         key="chest-pain",
         complaint="Chest pain",
+        body_site="2807005", organ_system="2808003", protocol="9914021",
         dispatch_code="2301067",                  # Chest Pain (Non-Traumatic)
         impressions=("R07.9", "I20.9", "R07.89"),
         symptom="R07.9",
@@ -98,6 +99,8 @@ LIBRARY: dict[str, Presentation] = {
         als_rate=0.85,
         refusal_rate=0.08,
         vitals=Vitals(systolic=(96, 178), heart_rate=(52, 124), pain=(3, 10)),
+        ecg=True,
+        reperfusion=True,
         meds=(ASPIRIN, NITRO, FENTANYL),
         procs=(ECG_12_LEAD, IV_ACCESS),
     ),
@@ -112,6 +115,8 @@ LIBRARY: dict[str, Presentation] = {
         refusal_rate=0.0,
         requires_als=True,
         arrest=ARREST_BEFORE_EMS,
+        arrest_detail=True,
+        ecg=True,
         vitals=Vitals(systolic=(0, 60), heart_rate=(0, 40), resp_rate=(0, 6),
                       spo2=(0, 70), pain=(0, 0), avpu=AVPU_UNRESPONSIVE),
         meds=(EPI_IV, AMIODARONE, OXYGEN),
@@ -120,6 +125,7 @@ LIBRARY: dict[str, Presentation] = {
     "stroke": Presentation(
         key="stroke",
         complaint="Facial droop and left-sided weakness",
+        body_site="2807013", organ_system="2808005",
         dispatch_code="2301027",                  # Stroke / CVA
         impressions=("I63.9", "G45.9", "I61.9"),
         symptom="R47.01",
@@ -128,11 +134,14 @@ LIBRARY: dict[str, Presentation] = {
         refusal_rate=0.02,
         vitals=Vitals(systolic=(130, 210), heart_rate=(58, 104),
                       pain=(0, 2), avpu=AVPU_VERBAL),
+        ecg=True,
+        stroke_scale=True,
         procs=(ECG_12_LEAD, GLUCOSE_CHECK, IV_ACCESS),
     ),
     "respiratory": Presentation(
         key="respiratory",
         complaint="Shortness of breath",
+        body_site="2807005", organ_system="2808015",
         dispatch_code="2301005",                  # Breathing Problem
         impressions=("J44.1", "J45.901", "J18.9"),
         symptom="R06.02",
@@ -167,6 +176,7 @@ LIBRARY: dict[str, Presentation] = {
         age_range=(18, 70),
         als_rate=0.75,
         refusal_rate=0.22,       # refusal after reversal is extremely common
+        substance_indicators=True,
         vitals=Vitals(systolic=(88, 138), heart_rate=(48, 92),
                       resp_rate=(4, 12), spo2=(72, 92), pain=(0, 1),
                       avpu=AVPU_UNRESPONSIVE),
@@ -232,6 +242,7 @@ LIBRARY: dict[str, Presentation] = {
     "abdominal-pain": Presentation(
         key="abdominal-pain",
         complaint="Abdominal pain and nausea",
+        body_site="2807001", organ_system="2808013",
         dispatch_code="2301001",                  # Abdominal Pain
         impressions=("R10.9", "R10.31", "K59.00"),
         symptom="R10.9",
@@ -286,6 +297,7 @@ LIBRARY: dict[str, Presentation] = {
     "interfacility": Presentation(
         key="interfacility",
         complaint="Interfacility transfer for higher level of care",
+        transfer_reason="2820001",
         dispatch_code="2301061",                  # Sick Person
         impressions=("I50.9", "N18.6", "J96.00"),
         symptom="R06.00",
@@ -294,6 +306,7 @@ LIBRARY: dict[str, Presentation] = {
         refusal_rate=0.0,
         service=SERVICE_INTERFACILITY,
         vitals=Vitals(systolic=(98, 158), heart_rate=(62, 112), pain=(0, 5)),
+        ecg=True,
         meds=(SALINE,),
         procs=(IV_ACCESS, ECG_12_LEAD),
     ),

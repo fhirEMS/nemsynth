@@ -101,6 +101,61 @@ DISPOSITION_DEAD_ON_SCENE = "4230013"
 
 COMPLAINT_CHIEF = "2803001"           # Complaint type: Chief
 
+# --- Disposition. Every transport answers these, and none were being
+# generated, so the mapper's whole destination/handoff path went unexercised.
+TRANSPORT_GROUND = "4216005"          # Ground-Ambulance
+MODE_EMERGENT = "4217001"             # Emergent (Immediate Response)
+MODE_NON_EMERGENT = "4217005"         # Non-Emergent
+ACUITY_CRITICAL = "4219001"           # Critical (Red)
+ACUITY_EMERGENT = "4219003"           # Emergent (Yellow)
+ACUITY_LOWER = "4219005"              # Lower Acuity (Green)
+ACUITY_DEAD_WITH_EFFORT = "4219009"   # Dead with Resuscitation Efforts
+REASON_CLOSEST = "4220001"            # Closest Facility
+REASON_PROTOCOL = "4220019"           # Protocol
+DEST_ED = "4221003"                   # Hospital-Emergency Department
+CAPABILITY_GENERAL = "9908007"        # Hospital (General)
+ALERT_NONE = "4224001"                # No
+ALERT_CARDIAC_ARREST = "4224005"      # Yes-Cardiac Arrest
+CARE_PROVIDED = "4228001"             # Patient Evaluated and Care Provided
+CARE_REFUSED = "4228007"              # Patient Refused Evaluation/Care
+CREW_PRIMARY = "4229001"              # Initiated and Continued Primary Care
+LEVEL_BLS_PROTOCOL = "4232001"        # BLS - All Levels
+LEVEL_ALS_PROTOCOL = "4232005"        # ALS - Paramedic
+
+# --- ECG, GCS qualifier, stroke scale.
+ECG_RHYTHM_SINUS = "9901047"          # Sinus Rhythm
+# 9901035 is PEA. Guessing it here would have put every routine chest-pain
+# patient into pulseless electrical activity — clinically absurd, perfectly
+# XSD-valid, and invisible without reading the label back.
+ECG_TYPE_12_LEAD = "3304007"          # 12 Lead-Left Sided (Normal)
+ECG_INTERP_MANUAL = "3305003"         # Manual Interpretation
+GCS_LEGITIMATE = "3322003"            # Initial GCS has legitimate value
+STROKE_SCALE_CINCINNATI = "3330001"   # Cincinnati Prehospital Stroke Scale
+STROKE_NEGATIVE = "3329001"           # Negative
+
+# --- Cardiac arrest registry. Thirteen national elements, none generated
+# before: the arrest scenario set eArrest.01 and stopped.
+ETIOLOGY_CARDIAC = "3002001"          # Cardiac (Presumed)
+RESUS_COMPRESSIONS = "3003005"        # Initiated Chest Compressions
+WITNESSED_BYSTANDER = "3004007"       # Witnessed by Bystander
+WITNESSED_NOT = "3004001"             # Not Witnessed
+AED_NO = "3007001"                    # No
+AED_WITH_DEFIB = "3007005"            # Yes, With Defibrillation
+CPR_MANUAL = "3009001"                # Compressions-Manual
+RHYTHM_VFIB = "3011011"               # Ventricular Fibrillation
+RHYTHM_ASYSTOLE = "3011001"           # Asystole
+ROSC_NO = "3012001"                   # No
+ROSC_PRIOR_TO_ED = "3012005"          # Yes, Prior to Arrival at the ED
+CPR_STOPPED_ROSC = "3016011"          # Return of Spontaneous Circulation
+CPR_STOPPED_PROTOCOL = "3016009"      # Protocol/Policy Requirements Completed
+ARRIVAL_RHYTHM_ASYSTOLE = "9901003"   # Asystole
+END_ROSC_FIELD = "3018007"            # ROSC in the Field
+END_EXPIRED_FIELD = "3018003"         # Expired in the Field
+BY_BYSTANDER = "3020001"              # Bystander
+BY_EMS_FIRST_RESPONDER = "3020007"    # First Responder (EMS)
+AED_BY_EMS = "3021007"                # First Responder (EMS)
+DEFIB_BY_EMS = "3022007"              # First Responder (EMS)
+
 
 @dataclass(frozen=True)
 class Med:
@@ -156,6 +211,23 @@ class Presentation:
     procs: tuple[Proc, ...] = ()
     injury_codes: tuple[str, ...] = ()          # eInjury.01, pattern [TV-Y]nn
     arrest: str = ARREST_NO
+    #: Emit the full cardiac-arrest registry (eArrest.02-.22), not just .01.
+    arrest_detail: bool = False
+    #: Emit ECG rhythm/type/interpretation on each vitals set.
+    ecg: bool = False
+    #: Emit a prehospital stroke scale result on each vitals set.
+    stroke_scale: bool = False
+    #: eSituation.07 / .08 — where the complaint is, and which organ system.
+    body_site: str | None = None
+    organ_system: str | None = None
+    #: eProtocols.01, the protocol the crew worked under.
+    protocol: str | None = None
+    #: eSituation.20, required in substance for an interfacility transfer.
+    transfer_reason: str | None = None
+    #: eHistory.17 — alcohol/drug indicators noted at the scene.
+    substance_indicators: bool = False
+    #: eVitals.31 — the reperfusion checklist, for a suspected STEMI.
+    reperfusion: bool = False
     service: str = SERVICE_911_SCENE
     # Interventions are what a paramedic does; a BLS crew does fewer of them.
     requires_als: bool = False
@@ -179,7 +251,8 @@ def _drift(rng: random.Random, low: int, high: int, index: int, improving: bool)
 
 
 def _vital_set(rng: random.Random, spec: Vitals, when: datetime,
-               index: int, improving: bool) -> dict:
+               index: int, improving: bool, ecg: bool = False,
+               stroke_scale: bool = False, reperfusion: bool = False) -> dict:
     systolic = _drift(rng, *spec.systolic, index, improving)
     # Diastolic tracks systolic rather than floating free: an 80/140 reading is
     # nonsense no consumer should have to accommodate.
@@ -197,7 +270,113 @@ def _vital_set(rng: random.Random, spec: Vitals, when: datetime,
     }
     if spec.glucose:
         reading["eVitals.18"] = _drift(rng, *spec.glucose, index, improving)
+
+    # Glasgow Coma Score. The components MUST sum to the total — a chart where
+    # they do not is the sort of internal contradiction a consumer may
+    # reasonably trust and be wrong about.
+    eye = 1 if spec.avpu == AVPU_UNRESPONSIVE else rng.randint(3, 4)
+    verbal = 1 if spec.avpu == AVPU_UNRESPONSIVE else rng.randint(3, 5)
+    motor = 1 if spec.avpu == AVPU_UNRESPONSIVE else rng.randint(4, 6)
+    reading.update({
+        "eVitals.19": eye,
+        "eVitals.20": verbal,
+        "eVitals.21": motor,
+        "eVitals.22": GCS_LEGITIMATE,
+        "eVitals.23": eye + verbal + motor,
+    })
+    if ecg:
+        reading.update({
+            "eVitals.03": ECG_RHYTHM_SINUS,
+            "eVitals.04": ECG_TYPE_12_LEAD,
+            "eVitals.05": ECG_INTERP_MANUAL,
+        })
+    if reperfusion:
+        reading["eVitals.31"] = REPERFUSION_NO_CONTRA
+    if stroke_scale:
+        reading.update({
+            "eVitals.29": STROKE_NEGATIVE,
+            "eVitals.30": STROKE_SCALE_CINCINNATI,
+        })
     return reading
+
+
+#: Intervention outcome/attribution, per group instance. A medication given
+#: with no recorded response, by nobody in particular, is a chart nobody wrote.
+MED_RESPONSE_IMPROVED = "9916001"     # Improved
+MED_RESPONSE_UNCHANGED = "9916003"    # Unchanged
+ROLE_PARAMEDIC = "9905007"            # Paramedic
+PROC_NO_COMPLICATION = "3907033"      # None
+MED_NO_COMPLICATION = "3708031"       # None
+
+#: Demographics and administrative elements every real chart carries.
+PAYMENT_INSURANCE = "2601001"         # Insurance
+SERVICE_LEVEL_BLS = "2650007"         # BLS
+SCENE_PATIENTS_SINGLE = "2707005"     # Single
+SCENE_PATIENTS_MULTIPLE = "2707001"   # Multiple
+EMD_WITH_INSTRUCTIONS = "2302003"     # Yes, With Pre-Arrival Instructions
+ACUITY_INITIAL = {
+    ACUITY_CRITICAL: "2813001",       # Critical (Red)
+    ACUITY_EMERGENT: "2813003",       # Emergent (Yellow)
+    ACUITY_LOWER: "2813005",          # Lower Acuity (Green)
+    ACUITY_DEAD_WITH_EFFORT: "2813007",
+}
+
+#: (element, a real delay, the explicit "None/No Delay"). Each element has its
+#: own enumeration; the codes are NOT interchangeable between them.
+_DELAYS = (
+    ("eResponse.08", "2208005", "2208013"),   # High Call Volume     / None
+    ("eResponse.09", "2209001", "2209011"),   # Crowd                / None
+    ("eResponse.10", "2210001", "2210017"),   # Awaiting Air Unit    / None
+    ("eResponse.11", "2211001", "2211011"),   # Crowd                / None
+    ("eResponse.12", "2212001", "2212015"),   # Clean-up             / None
+)
+
+
+BARRIERS_NONE = "3101009"             # None Noted
+DRUG_USE_ADMITS = "3117005"           # Patient Admits to Alcohol Use
+TRAUMA_HIGH_RISK = "2903005"          # Chest wall instability/deformity/flail
+TRAUMA_MODERATE_RISK = "2904001"      # Pedestrian/bicycle rider thrown/run over
+REPERFUSION_NO_CONTRA = "3331003"     # No Contraindications to Thrombolytic Use
+
+#: ePatient.14 Race. Drawn uniformly: this is a STRUCTURAL generator, and
+#: inventing a racial distribution would be a demographic claim the project has
+#: no basis for and no business making. The point is only that the element
+#: carries a real value so a consumer's mapping of it is exercised.
+_RACES = ("2514001", "2514003", "2514005", "2514007", "2514009", "2514011")
+
+
+def _arrest_block(rng: random.Random) -> dict:
+    """The cardiac-arrest registry (eArrest.02-.22).
+
+    Thirteen national elements that were never generated: the arrest scenario
+    set eArrest.01 and stopped, so everything a resuscitation actually records
+    — who witnessed it, who started CPR, the first monitored rhythm, whether
+    circulation returned — was invisible to any consumer being tested.
+
+    The outcome drives the rest. A patient with ROSC is not also expired in the
+    field, and CPR discontinued for "return of spontaneous circulation" must
+    not appear on a patient who never got any; those contradictions are
+    XSD-valid and would teach a consumer something false.
+    """
+    rosc = rng.random() < 0.35
+    witnessed = rng.random() < 0.6
+    bystander_cpr = witnessed and rng.random() < 0.5
+    shockable = rng.random() < 0.4
+    return {
+        "eArrest.02": ETIOLOGY_CARDIAC,
+        "eArrest.03": RESUS_COMPRESSIONS,
+        "eArrest.04": WITNESSED_BYSTANDER if witnessed else WITNESSED_NOT,
+        "eArrest.07": AED_WITH_DEFIB if bystander_cpr and shockable else AED_NO,
+        "eArrest.09": CPR_MANUAL,
+        "eArrest.11": RHYTHM_VFIB if shockable else RHYTHM_ASYSTOLE,
+        "eArrest.12": ROSC_PRIOR_TO_ED if rosc else ROSC_NO,
+        "eArrest.16": CPR_STOPPED_ROSC if rosc else CPR_STOPPED_PROTOCOL,
+        "eArrest.17": ARRIVAL_RHYTHM_ASYSTOLE,
+        "eArrest.18": END_ROSC_FIELD if rosc else END_EXPIRED_FIELD,
+        "eArrest.20": BY_BYSTANDER if bystander_cpr else BY_EMS_FIRST_RESPONDER,
+        "eArrest.21": AED_BY_EMS,
+        "eArrest.22": DEFIB_BY_EMS,
+    }
 
 
 def build(presentation: Presentation, rng: random.Random,
@@ -247,16 +426,38 @@ def build(presentation: Presentation, rng: random.Random,
         "eSituation.11": rng.choice(presentation.impressions),
 
         "eScene.01": YES,
+        "eScene.06": SCENE_PATIENTS_SINGLE,
         "eScene.07": NO,
+        "eDispatch.02": EMD_WITH_INSTRUCTIONS,
+        "ePatient.14": rng.choice(_RACES),
+        "ePayment.01": PAYMENT_INSURANCE,
+        "ePayment.50": SERVICE_LEVEL_BLS,
+        "eHistory.01": BARRIERS_NONE,
 
         "eArrest.01": presentation.arrest,
         "eDisposition.30": DISPOSITION_REFUSED if refused else DISPOSITION_TRANSPORTED,
     }
     if presentation.symptom:
         values["eSituation.09"] = presentation.symptom
+    if presentation.body_site:
+        values["eSituation.07"] = presentation.body_site
+    if presentation.organ_system:
+        values["eSituation.08"] = presentation.organ_system
+    if presentation.protocol:
+        values["eProtocols.01"] = presentation.protocol
+    if presentation.transfer_reason:
+        values["eSituation.20"] = presentation.transfer_reason
+    if presentation.substance_indicators:
+        values["eHistory.17"] = DRUG_USE_ADMITS
     if presentation.injury_codes:
         values["eSituation.02"] = INJURY_YES
         values["eInjury.01"] = rng.choice(presentation.injury_codes)
+        # Trauma triage criteria drive destination choice in the field, so a
+        # trauma chart without them is missing the thing that justified it.
+        if rng.random() < 0.4:
+            values["eInjury.03"] = TRAUMA_HIGH_RISK
+        elif rng.random() < 0.5:
+            values["eInjury.04"] = TRAUMA_MODERATE_RISK
 
     # Serial vitals. A refusal is one set on scene; a transport gets 2-3,
     # trending toward normal once treated — the shape of a real chart.
@@ -270,7 +471,9 @@ def build(presentation: Presentation, rng: random.Random,
 
     treated = als and not refused
     values["eVitals.VitalGroup"] = [
-        _vital_set(rng, presentation.vitals, when, index, improving=treated)
+        _vital_set(rng, presentation.vitals, when, index, improving=treated,
+                   ecg=presentation.ecg, stroke_scale=presentation.stroke_scale,
+                   reperfusion=presentation.reperfusion)
         for index, when in enumerate(readings)
     ]
 
@@ -287,6 +490,10 @@ def build(presentation: Presentation, rng: random.Random,
                     "eMedications.04": med.route,
                     "eMedications.05": med.dose,
                     "eMedications.06": med.units,
+                    "eMedications.07": (MED_RESPONSE_IMPROVED if index == 0
+                                        else MED_RESPONSE_UNCHANGED),
+                    "eMedications.08": MED_NO_COMPLICATION,
+                    "eMedications.10": ROLE_PARAMEDIC,
                 }
                 for index, med in enumerate(presentation.meds)
             ]
@@ -300,6 +507,9 @@ def build(presentation: Presentation, rng: random.Random,
                     "eProcedures.03": proc.snomed,
                     "eProcedures.05": proc.attempts,
                     "eProcedures.06": YES if proc.successful else NO,
+                    "eProcedures.07": PROC_NO_COMPLICATION,
+                    "eProcedures.08": MED_RESPONSE_IMPROVED,
+                    "eProcedures.10": ROLE_PARAMEDIC,
                 }
                 for index, proc in enumerate(doable)
             ]
@@ -307,5 +517,45 @@ def build(presentation: Presentation, rng: random.Random,
             "eTimes.09": iso(depart),
             "eTimes.11": iso(at_destination),
             "eTimes.12": iso(transfer),
+            # The destination/handoff block. Every transport answers these, and
+            # none were generated before, so the mapper's whole destination
+            # path went unexercised at volume.
+            "eDisposition.16": TRANSPORT_GROUND,
+            "eDisposition.17": MODE_EMERGENT if als else MODE_NON_EMERGENT,
+            "eDisposition.20": rng.choice([REASON_CLOSEST, REASON_PROTOCOL]),
+            "eDisposition.21": DEST_ED,
+            "eDisposition.23": CAPABILITY_GENERAL,
+            "eDisposition.24": (ALERT_CARDIAC_ARREST if presentation.arrest_detail
+                                else ALERT_NONE),
         })
+
+    # Acuity on release must agree with the rest of the chart: a patient who
+    # arrested and was not resuscitated is not "lower acuity".
+    if presentation.arrest_detail:
+        acuity = ACUITY_DEAD_WITH_EFFORT if not refused else ACUITY_CRITICAL
+    elif refused:
+        acuity = ACUITY_LOWER
+    else:
+        acuity = ACUITY_EMERGENT if als else ACUITY_LOWER
+    values["eSituation.13"] = ACUITY_INITIAL[acuity]
+    values.update({
+        "eDisposition.19": acuity,
+        "eDisposition.28": CARE_REFUSED if refused else CARE_PROVIDED,
+        "eDisposition.29": CREW_PRIMARY,
+        "eDisposition.32": LEVEL_ALS_PROTOCOL if als else LEVEL_BLS_PROTOCOL,
+    })
+
+    if presentation.arrest_detail:
+        values.update(_arrest_block(rng))
+
+    # Delays. Each of the five is a DIFFERENT enumeration with its own code
+    # prefix — reusing one element's code across all five was XSD-invalid, and
+    # the self-validation gate caught it. Both a real delay and an explicit
+    # "None/No Delay" are worth generating: the second is an assertion, not a
+    # gap, and a consumer that treats them alike loses that.
+    for element, delay, none in _DELAYS:
+        if rng.random() < 0.10:
+            values[element] = delay
+        elif rng.random() < 0.25:
+            values[element] = none
     return values

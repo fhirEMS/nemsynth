@@ -175,6 +175,21 @@ validated perfectly and joined to nothing would look like coverage and be none.
 easily gets wrong by turning absence into an empty string instead of keeping
 its data-absent path and withholding the profile claim.
 
+## Coverage
+
+A clean sweep is only as good as the surface it covers. When the corpus sweep
+first reported 0 findings across 20,000 documents, that read as strong evidence
+— until it was measured: only **19 of 83 national elements (22%)** ever carried
+a real value. Everything else was nil+NV, so the consumer's handling of it never
+executed. The volume was real; the coverage was not.
+
+The scenario library now populates **93%** of the national dataset with real
+values (78/83). The five that remain empty are deliberate: `eOutcome.01/.02` are
+written by the inbound outcome loop rather than by a crew at the time of the
+call, and three are optional "additional descriptors" with no clinical driver.
+emsinterop's `tests/test_corpus_coverage.py` holds that floor and requires every
+unpopulated element to be a documented decision rather than an oversight.
+
 ## Status
 
 Phases 1 through 5 work. An empty skeleton validates with **0 errors**; all 17
