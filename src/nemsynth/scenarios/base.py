@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from .. import distributions as dist
+from ..crew import pcr_crew_groups
 
 # --- NEMSIS code values, pinned with the label the XSD gives them ------------
 ROUTE_IV = "9927023"          # Intravenous (IV)
@@ -435,6 +436,10 @@ def build(presentation: Presentation, rng: random.Random,
         "eHistory.01": BARRIERS_NONE,
 
         "eArrest.01": presentation.arrest,
+        # The crew that ran the call. Repeating group: one instance per member,
+        # carrying only IDs and codes — the names live in the DEM roster, which
+        # is the join this package exists to exercise.
+        "eCrew.CrewGroup": pcr_crew_groups(),
         "eDisposition.30": DISPOSITION_REFUSED if refused else DISPOSITION_TRANSPORTED,
     }
     if presentation.symptom:

@@ -24,6 +24,7 @@ import random
 from lxml import etree
 
 from . import messiness, schema, skeleton, validate
+from .crew import dem_personnel_groups
 from .skeleton import NS, XSI, Absent
 
 #: The agency every generated document belongs to. Shared with `generate.py`
@@ -80,6 +81,10 @@ def _report_values(rng: random.Random, name: str | None) -> dict:
         "dAgency.06": _COUNTY,
         "dConfiguration.01": _STATE,
     }
+    # The personnel roster. A PCR names crew members by id and nothing else, so
+    # without this a consumer can say a paramedic ran the call but not who.
+    values["dPersonnel.PersonnelGroup"] = dem_personnel_groups()
+
     facility, code = rng.choice(_FACILITIES)
     values["dFacility.02"] = facility
     values["dFacility.03"] = code
