@@ -51,6 +51,7 @@ class CrewMember:
     first: str
     level: str            # eCrew.02
     role: str             # eCrew.03
+    phone: str            # dPersonnel.09
 
 
 #: The default crew. One paramedic running the call, two EMTs assisting —
@@ -58,10 +59,30 @@ class CrewMember:
 #: differ (Paramedic vs EMT) and so do the roles (primary vs other vs driver),
 #: so a consumer that collapses the two has somewhere to go wrong.
 DEFAULT_CREW: tuple[CrewMember, ...] = (
-    CrewMember("1911", "Albert", "Chad", LEVEL_PARAMEDIC, ROLE_PRIMARY_AT_SCENE),
-    CrewMember("09112", "Ritirato", "Bobette", LEVEL_EMT, ROLE_OTHER_AT_SCENE),
-    CrewMember("09109", "Capo", "Josephina", LEVEL_EMT, ROLE_DRIVER_TRANSPORT),
+    CrewMember("1911", "Albert", "Chad", LEVEL_PARAMEDIC,
+               ROLE_PRIMARY_AT_SCENE, "801-555-0101"),
+    CrewMember("09112", "Ritirato", "Bobette", LEVEL_EMT,
+               ROLE_OTHER_AT_SCENE, "801-555-0112"),
+    CrewMember("09109", "Capo", "Josephina", LEVEL_EMT,
+               ROLE_DRIVER_TRANSPORT, "801-555-0109"),
 )
+
+#: A shared, invented station address. C-CDA's US Realm Header makes address
+#: and telecom SHALL on the document's author, and NEMSIS has homes for both.
+#: The 555 prefix is reserved for fiction and the street does not exist, so
+#: nothing here can collide with a real person or place.
+#: NEMSIS codes these rather than spelling them: city is a GNIS code, state is
+#: the two-digit ANSI code, and PhoneNumber is pattern-checked as a full NANP
+#: number — a bare "555-0100" is invalid. 555-01xx with a real area code is the
+#: range reserved for fiction, so these dial nowhere.
+STATION = {
+    "street": "1 Synthetic Way",
+    "city_gnis": "1454997",   # Salt Lake City
+    "state": "49",            # Utah, matching the agency's ANSI state
+    "zip": "84101",
+    "phone": "801-555-0100",
+    "email": "dispatch@example.org",
+}
 
 
 def pcr_crew_groups(crew: tuple[CrewMember, ...] = DEFAULT_CREW) -> list[dict]:
@@ -84,9 +105,28 @@ def dem_personnel_groups(crew: tuple[CrewMember, ...] = DEFAULT_CREW) -> list[di
             # The join back to eCrew.01. A roster whose licensure ids do not
             # match the records is XSD-valid and joins to nothing — the same
             # trap as an agency roster for an agency that never ran a call.
+            "dPersonnel.04": STATION["street"],
+            "dPersonnel.05": STATION["city_gnis"],
+            "dPersonnel.06": STATION["state"],
+            "dPersonnel.07": STATION["zip"],
+            "dPersonnel.09": m.phone,
             "dPersonnel.22": STATE_OF_LICENSURE,
             "dPersonnel.23": m.crew_id,
             "dPersonnel.24": m.level,
         }
         for m in crew
     ]
+
+
+def dem_agency_contact() -> dict:
+    """`dContact` values for the agency — the CDA custodian's telecom/addr."""
+    return {
+        "dContact.02": "Dispatch",
+        "dContact.03": "Agency",
+        "dContact.05": STATION["street"],
+        "dContact.06": STATION["city_gnis"],
+        "dContact.07": STATION["state"],
+        "dContact.08": STATION["zip"],
+        "dContact.10": STATION["phone"],
+        "dContact.11": STATION["email"],
+    }

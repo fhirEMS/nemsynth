@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.0 — 2026-08-14
+
+- **A default crew, spanning both datasets.** NEMSIS names the join itself:
+  `eCrew.01` is the state certification/licensure number and `dPersonnel.23`
+  is the same number in the roster. The PCR now carries three crew members
+  (a paramedic running the call plus two EMTs, with distinct levels AND roles),
+  and the DEM carries their names, licensure and contact details.
+- Invented contact detail so a consumer can satisfy C-CDA's US Realm Header:
+  `801-555-01xx` (the fiction range, and NEMSIS pattern-checks full NANP
+  numbers, so a bare 555-0101 is invalid), a GNIS-coded city and ANSI state.
+
+The people are invented and the certification numbers are not real.
+
 ## v0.1.0 — 2026-08-14
 
 First tagged release. All five planned phases are delivered; further work is
