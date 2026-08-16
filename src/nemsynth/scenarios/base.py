@@ -41,6 +41,7 @@ from datetime import datetime, timedelta
 
 from .. import distributions as dist
 from ..crew import pcr_crew_groups
+from ..gnis import ANSI_STATE, scene_city
 
 # --- NEMSIS code values, pinned with the label the XSD gives them ------------
 ROUTE_IV = "9927023"          # Intravenous (IV)
@@ -426,6 +427,11 @@ def build(presentation: Presentation, rng: random.Random,
         "eSituation.04": presentation.complaint,
         "eSituation.11": rng.choice(presentation.impressions),
 
+        # Scene location. The GNIS code and state come from the verified
+        # table together, so a corpus can vary the town without ever placing a
+        # city in the wrong state.
+        "eScene.17": scene_city(rng).gnis,
+        "eScene.18": ANSI_STATE,
         "eScene.01": YES,
         "eScene.06": SCENE_PATIENTS_SINGLE,
         "eScene.07": NO,

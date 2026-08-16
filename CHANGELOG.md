@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.3.0 — 2026-08-14
+
+### Added — real GNIS city codes, cross-checked against their state
+
+NEMSIS stores a city as a **GNIS feature id**, not a name — `dPersonnel.05`,
+`dContact.06` and `eScene.17` are all `CityGnisCode`, whose schema type is a
+bare `xs:positiveInteger`. **Any integer validates.** A made-up code passes
+every gate this project has and names a different town, or nowhere at all,
+which is precisely the class of defect a generator must not manufacture.
+
+So twelve Utah places were looked up in the USGS National Map Geographic Names
+service and recorded with the state the service returned:
+
+| GNIS | Place | County |
+|---|---|---|
+| 1454997 | Salt Lake City | Salt Lake |
+| 1444661 | Provo | Utah |
+| 1444049 | Ogden | Weber |
+| 1455905 | Sandy City | Salt Lake |
+| 1444110 | Orem | Utah |
+| 1437843 | West Valley City | Salt Lake |
+| 1442459 | Layton | Davis |
+| 1442849 | Logan | Cache |
+| 1455098 | Saint George | Washington |
+| 1443742 | Murray | Salt Lake |
+| 1427473 | Draper | Salt Lake |
+| 1433590 | Tooele | Tooele |
+
+`test_gnis.py` cross-checks every one against the agency's ANSI state — a city
+in the wrong state is XSD-valid, geographically impossible, and invisible
+unless the two are compared. An opt-in test (`NEMSYNTH_VERIFY_GNIS=1`)
+re-resolves all twelve at USGS; it is opt-in because a unit suite that needs a
+government web service is one that fails on a train.
+
+The station city, the ANSI state on every address, and the crew's state of
+licensure now all derive from that one table, so they cannot drift apart. Scene
+addresses vary across all twelve, so a corpus is no longer all one town.
+
 ## v0.2.0 — 2026-08-14
 
 - **A default crew, spanning both datasets.** NEMSIS names the join itself:

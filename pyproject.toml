@@ -1,6 +1,6 @@
 [project]
 name = "nemsynth"
-version = "0.2.0"
+version = "0.3.0"
 description = "Statistically grounded synthetic NEMSIS v3.5 ePCR generator — a Synthea for EMS"
 readme = "README.md"
 requires-python = ">=3.11"

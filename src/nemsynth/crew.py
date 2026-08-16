@@ -25,12 +25,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .gnis import ANSI_STATE, STATION_CITY
+
 #: eCrew.02 Crew Member Level
 LEVEL_PARAMEDIC = "9925007"          # Paramedic
 LEVEL_EMT = "9925005"                # Emergency Medical Technician (EMT)
 
 #: dPersonnel.24 State EMS Certification Licensure Level mirrors eCrew.02.
-STATE_OF_LICENSURE = "49"            # matches the agency's ANSI state code
+STATE_OF_LICENSURE = ANSI_STATE      # matches the agency's ANSI state code
 
 #: eCrew.03 Crew Member Response Role
 ROLE_PRIMARY_AT_SCENE = "2403011"    # Primary Patient Caregiver-At Scene
@@ -77,8 +79,10 @@ DEFAULT_CREW: tuple[CrewMember, ...] = (
 #: range reserved for fiction, so these dial nowhere.
 STATION = {
     "street": "1 Synthetic Way",
-    "city_gnis": "1454997",   # Salt Lake City
-    "state": "49",            # Utah, matching the agency's ANSI state
+    # Both from the USGS-verified table, so the GNIS code and the ANSI state
+    # cannot drift apart — see gnis.py and its cross-check test.
+    "city_gnis": STATION_CITY.gnis,
+    "state": ANSI_STATE,
     "zip": "84101",
     "phone": "801-555-0100",
     "email": "dispatch@example.org",
