@@ -80,3 +80,13 @@ def test_codes_still_resolve_at_usgs():
         assert place.gnis in found, f"{place.name} ({place.gnis}) not found at USGS"
         assert found[place.gnis]["state_alpha"] == place.state_alpha, (
             f"{place.name} moved state: {found[place.gnis]['state_alpha']}")
+
+
+def test_the_gazetteer_covers_every_place_this_package_emits():
+    """A consumer resolving GNIS -> name needs the names for the places we
+    actually generate. If the table grows and the gazetteer does not, the
+    resolved path silently stops covering the new ones."""
+    g = gnis.gazetteer()
+    assert set(g) == {p.gnis for p in gnis.PLACES}
+    assert all(name and not name.isdigit() for name in g.values())
+    assert g["1454997"] == "Salt Lake City"

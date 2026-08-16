@@ -59,6 +59,21 @@ BY_GNIS = {p.gnis: p for p in PLACES}
 STATION_CITY = BY_GNIS["1454997"]
 
 
+def gazetteer() -> dict[str, str]:
+    """GNIS feature id -> city name, for a consumer that must resolve one.
+
+    NEMSIS stores the id; FHIR's `Address.city` and CDA's `<city>` want the
+    name, and neither standard has a coded-place element. A consumer therefore
+    needs a gazetteer or it has to leave the city absent — so this package
+    hands over the names for exactly the places it generates, which is what
+    makes the resolved path testable at all.
+
+    It is deliberately NOT a general gazetteer: twelve places, the ones this
+    generator emits. Shipping GNIS in full is USGS's job, not this project's.
+    """
+    return {place.gnis: place.name for place in PLACES}
+
+
 def scene_city(rng) -> Place:
     """A place for a scene address. Varied so a corpus is not all one town."""
     return rng.choice(PLACES)

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.0 — 2026-08-16
+
+- **`gnis.gazetteer()`** — GNIS feature id -> city name for the twelve places
+  this package emits. NEMSIS stores the id; FHIR's `Address.city` and CDA's
+  `<city>` want the name, and neither standard has a coded-place element, so a
+  consumer needs a gazetteer or must leave the city absent. Handing over the
+  names for exactly what we generate is what makes the resolved path testable
+  at all.
+
+  Deliberately **not** a general gazetteer — twelve places, not GNIS in full.
+  Shipping that is USGS's job.
+
 ## v0.3.0 — 2026-08-14
 
 ### Added — real GNIS city codes, cross-checked against their state
