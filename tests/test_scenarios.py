@@ -101,6 +101,133 @@ PINNED = {
     "eProcedures.07": {base.PROC_NO_COMPLICATION: "None"},
 }
 
+#: RxCUI -> RxNorm "Name" (ingredient level), retrieved 2026-08-16 from NLM's
+#: public RxNorm REST API: rxnav.nlm.nih.gov/REST/rxcui/{rxcui}/property.json
+#: ?propName=RxNorm%20Name. That data is public domain (no UMLS license
+#: needed), so this is a live source, not an assumption — pinned here so the
+#: suite fails offline instead of re-querying the network on every run.
+RXNORM_NAMES = {
+    "1191": ("aspirin",), "4917": ("nitroglycerin",), "4337": ("fentanyl",),
+    "7052": ("morphine",), "26225": ("ondansetron",), "7242": ("naloxone",),
+    "435": ("albuterol",), "7213": ("ipratropium",), "3992": ("epinephrine",),
+    "3498": ("diphenhydramine",), "6902": ("methylprednisolone",),
+    "6960": ("midazolam",),
+    "4850": ("glucose", "dextrose"),  # RxNorm's ingredient name; dextrose is the clinical synonym
+    "4832": ("glucagon",), "703": ("amiodarone",), "7806": ("oxygen",),
+    "9863": ("sodium chloride",),
+}
+
+
+def test_medication_rxcuis_resolve_to_the_ingredient_the_library_claims():
+    """Each `Med.rxnorm` must be the RxCUI for the drug `Med.name` says it is —
+    otherwise a document is a structurally valid, real-looking RxCUI attached
+    to the wrong medication, which is worse than an obviously fake one."""
+    seen = set()
+    for presentation in LIBRARY.values():
+        for med in presentation.meds:
+            seen.add(med.rxnorm)
+            assert med.rxnorm in RXNORM_NAMES, (
+                f"{med.rxnorm} ({med.name}) is not a verified RxCUI; "
+                f"look it up at rxnav.nlm.nih.gov before adding it"
+            )
+            aliases = RXNORM_NAMES[med.rxnorm]
+            # "Dextrose 50%" / "Sodium chloride 0.9%" carry strength the bare
+            # ingredient name does not, so match on containment, not equality.
+            assert any(alias in med.name.lower() for alias in aliases), (
+                f"RxCUI {med.rxnorm} is {aliases!r} per RxNorm, "
+                f"library calls it {med.name!r}"
+            )
+    assert seen == set(RXNORM_NAMES), "RXNORM_NAMES has entries the library never uses"
+
+
+#: Every ICD-10-CM code the library assigns as an impression, symptom or
+#: injury code, retrieved 2026-08-16 from NLM's public Clinical Table Search
+#: Service (clinicaltables.nlm.nih.gov/api/icd10cm — public domain, built from
+#: CMS's own ICD-10-CM release). A code missing here is either fake or, like
+#: the two this test caught, a real category missing its mandatory 7th
+#: character: `T14.90` isn't billable on its own (only T14.90XA/XD/XS are),
+#: and `V29.9XXA` doesn't exist at all — V29 is bicycle codes, not cars.
+ICD10CM_DESCRIPTIONS = {
+    "R07.9": "chest pain, unspecified",
+    "I20.9": "angina pectoris, unspecified",
+    "R07.89": "other chest pain",
+    "I46.9": "cardiac arrest, cause unspecified",
+    "I46.2": "cardiac arrest due to underlying cardiac condition",
+    "R09.2": "respiratory arrest",
+    "I63.9": "cerebral infarction, unspecified",
+    "G45.9": "transient cerebral ischemic attack, unspecified",
+    "I61.9": "nontraumatic intracerebral hemorrhage, unspecified",
+    "R47.01": "aphasia",
+    "J44.1": "chronic obstructive pulmonary disease with (acute) exacerbation",
+    "J45.901": "unspecified asthma with (acute) exacerbation",
+    "J18.9": "pneumonia, unspecified organism",
+    "R06.02": "shortness of breath",
+    "E11.649": "type 2 diabetes mellitus with hypoglycemia without coma",
+    "E11.65": "type 2 diabetes mellitus with hyperglycemia",
+    "E16.2": "hypoglycemia, unspecified",
+    "R41.82": "altered mental status, unspecified",
+    "T40.1X1A": "poisoning by heroin, accidental (unintentional), initial encounter",
+    "T40.601A": "poisoning by unspecified narcotics, accidental (unintentional), initial encounter",
+    "F11.90": "opioid use, unspecified, uncomplicated",
+    "R06.89": "other abnormalities of breathing",
+    "R56.9": "unspecified convulsions",
+    "G40.909": "epilepsy, unspecified, not intractable, without status epilepticus",
+    "S09.90XA": "unspecified injury of head, initial encounter",
+    "S29.9XXA": "unspecified injury of thorax, initial encounter",
+    "T14.90XA": "injury, unspecified, initial encounter",
+    "R52": "pain, unspecified",
+    "V43.52XA": "car driver injured in collision with other type car in traffic accident, initial encounter",
+    "V47.5XXA": "car driver injured in collision with fixed or stationary object in traffic accident, initial encounter",
+    "V49.9XXA": "car occupant (driver) (passenger) injured in unspecified traffic accident, initial encounter",
+    "S72.001A": "fracture of unspecified part of neck of right femur, initial encounter for closed fracture",
+    "S00.03XA": "contusion of scalp, initial encounter",
+    "M25.551": "pain in right hip",
+    "W19.XXXA": "unspecified fall, initial encounter",
+    "W18.30XA": "fall on same level, unspecified, initial encounter",
+    "W01.0XXA": "fall on same level from slipping, tripping and stumbling without subsequent striking against object, initial encounter",
+    "T78.2XXA": "anaphylactic shock, unspecified, initial encounter",
+    "T78.40XA": "allergy, unspecified, initial encounter",
+    "T78.00XA": "anaphylactic reaction due to unspecified food, initial encounter",
+    "R22.9": "localized swelling, mass and lump, unspecified",
+    "R10.9": "unspecified abdominal pain",
+    "R10.31": "right lower quadrant pain",
+    "K59.00": "constipation, unspecified",
+    "F29": "unspecified psychosis not due to a substance or known physiological condition",
+    "R45.851": "suicidal ideations",
+    "F41.9": "anxiety disorder, unspecified",
+    "R45.4": "irritability and anger",
+    "O80": "encounter for full-term uncomplicated delivery",
+    "O47.9": "false labor, unspecified",
+    "Z34.90": "encounter for supervision of normal pregnancy, unspecified, unspecified trimester",
+    "R50.9": "fever, unspecified",
+    "J06.9": "acute upper respiratory infection, unspecified",
+    "R56.00": "simple febrile convulsions",
+    "I50.9": "heart failure, unspecified",
+    "N18.6": "end stage renal disease",
+    "J96.00": "acute respiratory failure, unspecified whether with hypoxia or hypercapnia",
+    "R06.00": "dyspnea, unspecified",
+}
+
+
+def test_icd10_codes_are_real_billable_codes():
+    """A code that matches the field's regex but isn't in CMS's actual
+    ICD-10-CM release is invisible in review and wrong in the corpus — this
+    checks existence, which the pattern test deliberately does not."""
+    seen = set()
+    for presentation in LIBRARY.values():
+        codes = (*presentation.impressions,
+                 *((presentation.symptom,) if presentation.symptom else ()),
+                 *presentation.injury_codes)
+        seen.update(codes)
+        for code in codes:
+            assert code in ICD10CM_DESCRIPTIONS, (
+                f"{presentation.key}: {code!r} is not a real ICD-10-CM code; "
+                f"check clinicaltables.nlm.nih.gov/api/icd10cm before adding it"
+            )
+    assert seen == set(ICD10CM_DESCRIPTIONS), (
+        "ICD10CM_DESCRIPTIONS has entries the library never uses"
+    )
+
 
 @pytest.mark.parametrize("element", sorted(PINNED))
 def test_pinned_codes_still_mean_what_they_claim(model, element):

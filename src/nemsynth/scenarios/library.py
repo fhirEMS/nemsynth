@@ -201,12 +201,12 @@ LIBRARY: dict[str, Presentation] = {
         key="trauma-mvc",
         complaint="Motor vehicle collision, restrained driver",
         dispatch_code="2301041",                  # Traffic / Transportation Incident
-        impressions=("S09.90XA", "S29.9XXA", "T14.90"),
+        impressions=("S09.90XA", "S29.9XXA", "T14.90XA"),
         symptom="R52",
         age_range=(16, 85),
         als_rate=0.75,
         refusal_rate=0.16,       # refusal at an MVC is very common
-        injury_codes=("V43.52XA", "V47.5XXA", "V29.9XXA"),
+        injury_codes=("V43.52XA", "V47.5XXA", "V49.9XXA"),
         vitals=Vitals(systolic=(92, 158), heart_rate=(70, 130), pain=(2, 9)),
         meds=(FENTANYL, SALINE),
         procs=(SPINAL, IV_ACCESS, WOUND_CARE),

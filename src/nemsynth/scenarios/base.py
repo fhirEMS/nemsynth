@@ -27,10 +27,17 @@ letting an assumed distribution pass as measured:
     code fails the suite rather than silently generating nonsense.
   - **ICD-10-CM impressions** are real codes, checked against the XSD's own
     pattern for the field.
-  - **RxNorm and SNOMED CT** identifiers are clinically plausible ingredient-
-    and procedure-level concepts, NOT verified against a licensed release.
-    They are structurally correct and good enough to exercise a mapper; they
-    are not a terminology source. See `nemsynth sources`.
+  - **RxNorm** ingredient RxCUIs are verified against NLM's public RxNorm REST
+    API (rxnav.nlm.nih.gov — public domain, no UMLS license required): every
+    `Med.rxnorm` in the library resolves to the ingredient `Med.name` claims.
+    `test_scenarios.py` pins the (RxCUI, name) pairs so a typo'd digit fails
+    the suite instead of silently generating a real code for the wrong drug.
+  - **SNOMED CT** procedure concepts are clinically plausible and match codes
+    commonly cited in public NEMSIS/CMS implementation guidance, but are NOT
+    verified against a licensed release — SNOMED CT terms require a member's
+    license to redistribute, and this project does not carry one. Treat them
+    as structurally correct and good enough to exercise a mapper, not as a
+    terminology source. See `nemsynth sources`.
 """
 
 from __future__ import annotations
